@@ -32,7 +32,6 @@ __pycache__/
 
 # ----- 日誌文件 -----
 *.log
-*.txt
 !README*.txt
 
 # ----- IDE / 編輯器 -----
@@ -54,7 +53,13 @@ node_modules/
 .cache/
 .ninja_log
 .ninja_deps
-.gclient
+
+
+# ----- 截圖與臨時測試資源 -----
+*.png
+*.jpg
+*.jpeg
+*.gif
 
 # ----- 中間產物 -----
 *.o
