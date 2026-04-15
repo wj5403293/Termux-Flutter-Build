@@ -1,0 +1,278 @@
+# %YAML 1.2
+# root: path/to/flutter
+# arcĥ: build arch
+# version: engine version
+define:
+  prefix: '"data/data/com.termux/files/usr"'
+  distro: '"data/data/com.termux/files/usr/opt/flutter"'
+  remote: f'https://storage.googleapis.com/flutter_infra_release/flutter/{version}'
+
+control:
+  Package: flutter
+  Version: $tag
+  Architecture: $architecture
+  Maintainer: mumumusuc <mumumusuc@gmail.com>
+  Pre-Depends: x11-repo
+  Depends: git, which, gtk3, xorgproto, ninja, cmake, clang, pkg-config, openjdk-21
+  Homepage: https://www.github.com/flutter/flutter
+  Description: Flutter makes it easy and fast to build beautiful apps for mobile and beyond
+
+resource:
+  flutter:
+    source: $root
+    output: $distro
+    git: true
+
+  flutter_gpu:
+    source: $root/engine/src/flutter/lib/gpu
+    output: $distro/bin/cache/pkg/flutter_gpu
+    test:
+      file: $remote/flutter_gpu.zip
+      path: $distro/bin/cache/pkg
+
+  sky_engine:
+    source: $any/gen/dart-pkg/sky_engine
+    output: $distro/bin/cache/pkg/sky_engine
+    define:
+      any: &any output.any
+    test:
+      file: $remote/sky_engine.zip
+      path: $distro/bin/cache/pkg
+
+  dart_sdk:
+    source: $any/dart-sdk
+    output: $out/dart-sdk
+    define:
+      any: *any
+      out: &cache f'{distro}/bin/cache'
+    test:
+      file: $remote/dart-sdk-linux-$arch.zip
+      path: $distro/bin/cache
+
+  # dart binary for running flutter commands
+  # Use debug mode dart as it has compatible snapshot flags
+  dart_bin:
+    source: $debug/exe.unstripped/dart
+    output: $out/dart-sdk/bin/dart
+    define:
+      debug: output.debug
+      out: *cache
+    mode: 0o755
+
+  # dart snapshots required for flutter commands
+  dart_snapshots:
+    source: $debug/dart-sdk/bin/snapshots
+    output: $out/dart-sdk/bin/snapshots
+    define:
+      debug: output.debug
+      out: *cache
+
+  # dartaotruntime is required for flutter build apk/linux
+  dartaotruntime:
+    source: $any/dartaotruntime_product
+    output: $out/dart-sdk/bin/dartaotruntime
+    define:
+      any: *any
+      out: *cache
+    mode: 0o755
+
+  # dartdev AOT snapshot required for pub get, flutter create, etc.
+  # Only exists in release build output (debug build has JIT-only snapshots)
+  dartdev_aot:
+    source: $release/dartdev_aot.dart.snapshot
+    output: $out/dart-sdk/bin/snapshots/dartdev_aot.dart.snapshot
+    define:
+      release: output.release
+      out: *cache
+    mode: 0o644
+
+  # frontend_server_aot snapshot for AOT compilation
+  # Use product mode snapshot to work with dartaotruntime_product
+  frontend_server_aot:
+    source: $any/frontend_server_aot_product.dart.snapshot
+    output: $out/dart-sdk/bin/snapshots/frontend_server_aot.dart.snapshot
+    define:
+      any: *any
+      out: *cache
+    mode: 0o644
+
+  artifacts:
+    source:
+      - $root/engine/src/flutter/impeller/compiler/shader_lib
+      - $any/flutter_tester
+      - $any/font-subset
+      - $any/icudtl.dat
+      - $any/impellerc
+      - $any/gen_snapshot
+      - $any/libpath_ops.so
+      - $any/libtessellator.so
+      - $any/gen/const_finder.dart.snapshot
+    output:
+      - $eng/linux-$arch
+    define:
+      any: *any
+      eng: &eng f'{distro}/bin/cache/artifacts/engine'
+    test:
+      file: $remote/linux-$arch/artifacts.zip
+      path: $eng
+
+  flutter_linux_gtk: &gtk
+    source:
+      - $out/flutter_linux
+      - $out/gen_snapshot
+      - $out/libflutter_linux_gtk.so
+    output:
+      - $eng/linux-$arch$fix
+    define:
+      eng: *eng
+      out: output.debug
+      fix: '""'
+    test:
+      file: $remote/linux-$arch-debug/linux-$arch-flutter-gtk.zip
+      path: $eng
+
+  flutter_linux_gtk_release:
+    <<: *gtk
+    define:
+      eng: *eng
+      out: output.release
+      fix: '"-release"'
+    test:
+      file: $remote/linux-$arch-release/linux-$arch-flutter-gtk.zip
+      path: $eng
+
+  # Linux profile mode - VERIFIED WORKING (2026-01-07)
+  # Profile mode uses AOT compilation like release, but with profiling enabled.
+  # Requires Termux X11 to be running for flutter run -d linux --profile.
+  flutter_linux_gtk_profile:
+    <<: *gtk
+    define:
+      eng: *eng
+      out: output.profile
+      fix: '"-profile"'
+    test:
+      file: $remote/linux-$arch-profile/linux-$arch-flutter-gtk.zip
+      path: $eng
+
+  flutter_patched_sdk: &sdk
+    source:
+      - $out/flutter_patched_sdk/platform_strong.dill
+      - $out/flutter_patched_sdk/vm_outline_strong.dill
+    output:
+      - $eng/common/flutter_patched_sdk$fix
+    define:
+      eng: *eng
+      out: *any
+      fix: '""'
+    test:
+      file: $remote/flutter_patched_sdk.zip
+      path: &com $eng/common
+
+  # Use debug output for product SDK since we only build debug mode
+  # The product dill files are identical to debug for our Termux use case
+  flutter_patched_sdk_product:
+    <<: *sdk
+    define:
+      eng: *eng
+      out: *any
+      fix: '"_product"'
+    test:
+      file: $remote/flutter_patched_sdk_product.zip
+      path: *com
+
+  executable:
+    source: |-
+      #!/$prefix/bin/sh
+      exec /$distro/bin/flutter "$@"
+    output:
+      - $prefix/bin/flutter
+    binary: true
+    mode: 0o755
+
+  profile:
+    source: |-
+      export PATH=${PREFIX}/opt/flutter/bin:${PATH}
+      # Force Gradle to use our pre-configured NDK (prevents auto-download of new versions)
+      if [ -z "$ANDROID_NDK_HOME" ]; then
+        for ndk in ${PREFIX}/opt/android-sdk/ndk/*/; do
+          [ -d "$ndk" ] && export ANDROID_NDK_HOME="${ndk%/}" && break
+        done
+      fi
+    output: $prefix/etc/profile.d/flutter.sh
+    binary: true
+    mode: 0o755
+
+  stamps:
+    source: $version
+    output:
+      - $out/engine-dart-sdk.stamp
+      - $out/flutter_sdk.stamp
+      - $out/font-subset.stamp
+      - $out/linux-sdk.stamp
+      # Android stamps: prevent Flutter from downloading x64 tools
+      # All combos needed even though only arm64 gen_snapshot exists
+      - $out/android-arm-release.stamp
+      - $out/android-arm-profile.stamp
+      - $out/android-arm64-release.stamp
+      - $out/android-arm64-profile.stamp
+      - $out/android-x64-release.stamp
+      - $out/android-x64-profile.stamp
+    binary: true
+    define:
+      out: *cache
+    mode: 0o644
+
+  # Android gen_snapshot for building APKs on Termux
+  # This gen_snapshot runs on ARM64 Termux and produces Android ARM64 AOT code
+  #
+  # Technical limitation (tested 2025-12-28):
+  # Only android-arm64 is supported. android-arm and android-x64 fail because:
+  # - android-arm: BoringSSL has 32-bit shift overflow errors
+  # - android-x64: ARM64 sysroot incompatible with x64 compilation
+  # The Flutter GN build system doesn't properly separate host/target toolchains.
+  # Users must use --target-platform android-arm64 when building APKs.
+  android_gen_snapshot_arm64:
+    source:
+      - $android_out/clang_arm64/gen_snapshot
+    output:
+      - $eng/android-arm64-release/linux-$arch
+    define:
+      eng: *eng
+      android_out: f'{root}/engine/src/out/android_release_arm64'
+    mode: 0o755
+
+  # Android gen_snapshot for profile mode (flutter build apk --profile)
+  # Note: Profile mode builds gen_snapshot in root directory (not clang_arm64/)
+  android_gen_snapshot_arm64_profile:
+    source:
+      - $android_profile_out/exe.stripped/gen_snapshot
+    output:
+      - $eng/android-arm64-profile/linux-$arch
+    define:
+      eng: *eng
+      android_profile_out: f'{root}/engine/src/out/android_profile_arm64'
+    mode: 0o755
+
+  # VM snapshots required for debug APK builds
+  # These are needed by Flutter tools running on ARM64 host
+  vm_snapshots:
+    source:
+      - $debug/gen/flutter/lib/snapshot/vm_isolate_snapshot.bin
+      - $debug/gen/flutter/lib/snapshot/isolate_snapshot.bin
+    output:
+      - $eng/linux-$arch
+    define:
+      eng: *eng
+      debug: output.debug
+    mode: 0o644
+
+  # NOTE: vm_snapshots_profile removed - profile mode now uses release engine
+  # which doesn't need VM snapshots (they cause "Precompiled runtime requires
+  # precompiled snapshot" crash with AOT runtime)
+
+  # Post-install script for APK build environment setup
+  # $root is flutter/, so need ../scripts/install to reach scripts/install/
+  post_install:
+    source: $root/../scripts/install/post_install.sh
+    output: $prefix/share/flutter/post_install.sh
+    mode: 0o755

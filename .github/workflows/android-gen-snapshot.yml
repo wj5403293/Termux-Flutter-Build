@@ -1,0 +1,195 @@
+name: 测试 Android gen_snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 目标架构
+        required: true
+        default: arm64
+        type: choice
+        options:
+          - arm64
+      mode:
+        description: 构建模式
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - profile
+      jobs:
+        description: Ninja 并行数
+        required: true
+        default: "24"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-android-gen-snapshot-${{ github.ref }}-${{ inputs.arch }}-${{ inputs.mode }}
+  cancel-in-progress: false
+
+jobs:
+  android-gen-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: 显示测试流程
+        run: |
+          echo "========== Android gen_snapshot 专项测试 =========="
+          echo "1. 下载仓库源代码"
+          echo "2. 清理磁盘空间"
+          echo "3. 安装系统依赖与 Android NDK r27d"
+          echo "4. 配置 depot_tools 与 Python 依赖"
+          echo "5. Clone Flutter 并同步 Engine 依赖"
+          echo "6. 应用补丁并组装 sysroot"
+          echo "7. 执行 configure_android"
+          echo "8. 执行 build_android_gen_snapshot"
+          echo "9. 上传日志与 gen_snapshot 产物"
+          echo "================================================="
+
+      - name: 下载源代码
+        uses: actions/checkout@v4
+
+      - name: 清理磁盘空间
+        run: |
+          echo "[步骤 1/8] 清理 GitHub Runner 默认占用空间..."
+          df -h
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo docker system prune -af || true
+          df -h
+          echo "[步骤 1/8] 磁盘清理完成"
+
+      - name: 安装系统依赖
+        run: |
+          echo "[步骤 2/8] 安装系统依赖..."
+          sudo apt update
+          sudo apt install -y curl git python3 python3-pip ninja-build pkg-config unzip xz-utils libfreetype-dev
+          echo "[步骤 2/8] 系统依赖安装完成"
+
+      - name: 安装 Android NDK r27d
+        run: |
+          echo "[步骤 3/8] 检查并安装 Android NDK r27d..."
+          NDK_DIR=/opt/android-ndk-r27d
+          if [ ! -d "$NDK_DIR" ]; then
+            curl -L --retry 3 https://dl.google.com/android/repository/android-ndk-r27d-linux.zip -o /tmp/android-ndk-r27d-linux.zip
+            sudo unzip -q /tmp/android-ndk-r27d-linux.zip -d /opt
+          fi
+          test -d "$NDK_DIR"
+          echo "[步骤 3/8] Android NDK 已就绪: $NDK_DIR"
+
+      - name: 配置 depot_tools
+        uses: newkdev/setup-depot-tools@v1.0.1
+
+      - name: 安装 Python 依赖
+        run: |
+          echo "[步骤 4/8] 安装 Python 依赖..."
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+          echo "[步骤 4/8] Python 依赖安装完成"
+
+      - name: 提供 vpython3 备援
+        run: |
+          echo "[步骤 4/8] 检查 vpython3..."
+          if ! command -v vpython3 >/dev/null 2>&1; then
+            printf '%s\n' '#!/usr/bin/env bash' 'exec python3 "$@"' | sudo tee /usr/local/bin/vpython3 >/dev/null
+            sudo chmod +x /usr/local/bin/vpython3
+          fi
+          echo "[步骤 4/8] vpython3 已可用"
+
+      - name: 验证工具链
+        run: |
+          echo "[步骤 4/8] 验证 gclient / ninja / vpython3 / NDK..."
+          command -v gclient
+          command -v ninja
+          command -v vpython3
+          test -f .gclient
+          test -d /opt/android-ndk-r27d
+          echo "[步骤 4/8] 工具链验证完成"
+
+      - name: Clone Flutter
+        run: |
+          echo "[步骤 5/8] Clone Flutter SDK..."
+          python3 build.py clone
+          echo "[步骤 5/8] Flutter SDK 准备完成"
+
+      - name: 同步依赖
+        run: |
+          echo "[步骤 5/8] 开始 gclient sync，同步 Flutter Engine 依赖..."
+          python3 build.py sync
+          echo "[步骤 5/8] Engine 依赖同步完成"
+
+      - name: 应用补丁
+        run: |
+          echo "[步骤 6/8] 应用版本补丁..."
+          python3 build.py patch_engine
+          python3 build.py patch_dart
+          python3 build.py patch_skia
+          python3 build.py patch_flutter_sdk
+          echo "[步骤 6/8] 补丁应用完成"
+
+      - name: 组装 sysroot
+        run: |
+          echo "[步骤 6/8] 组装 Termux sysroot..."
+          python3 build.py sysroot --arch=${{ inputs.arch }}
+          echo "[步骤 6/8] sysroot 组装完成"
+
+      - name: 配置 Android gen_snapshot
+        run: |
+          mkdir -p logs
+          echo "[步骤 7/8] 执行 configure_android..."
+          set -o pipefail
+          python3 build.py configure_android --arch=${{ inputs.arch }} --mode=${{ inputs.mode }} 2>&1 | tee logs/01-configure_android.log
+          echo "[步骤 7/8] configure_android 完成"
+
+      - name: 构建 Android gen_snapshot
+        run: |
+          mkdir -p logs
+          echo "[步骤 8/8] 执行 build_android_gen_snapshot..."
+          set -o pipefail
+          python3 build.py build_android_gen_snapshot --arch=${{ inputs.arch }} --mode=${{ inputs.mode }} --jobs=${{ inputs.jobs }} 2>&1 | tee logs/02-build_android_gen_snapshot.log
+          echo "[步骤 8/8] build_android_gen_snapshot 完成"
+
+      - name: 解析产物信息
+        id: meta
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+
+          with open("build.toml", "rb") as f:
+              cfg = tomllib.load(f)
+
+          tag = cfg["flutter"]["tag"]
+          arch = "${{ inputs.arch }}"
+          mode = "${{ inputs.mode }}"
+          out_dir = f"flutter/engine/src/out/android_{mode}_{arch}"
+          artifact = f"android-gen-snapshot-{tag}-{arch}-{mode}"
+          print(f"tag={tag}")
+          print(f"out_dir={out_dir}")
+          print(f"artifact={artifact}")
+          PY
+
+      - name: 上传 gen_snapshot 产物
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact }}
+          path: |
+            ${{ steps.meta.outputs.out_dir }}/args.gn
+            ${{ steps.meta.outputs.out_dir }}/build.ninja
+            ${{ steps.meta.outputs.out_dir }}/clang_arm64/gen_snapshot
+            ${{ steps.meta.outputs.out_dir }}/exe.stripped/gen_snapshot
+            ${{ steps.meta.outputs.out_dir }}/gen_snapshot
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-gen-snapshot-logs-${{ inputs.arch }}-${{ inputs.mode }}
+          path: logs/*.log
+          if-no-files-found: ignore
+          retention-days: 14

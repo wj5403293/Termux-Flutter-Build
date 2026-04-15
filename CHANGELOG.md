@@ -1,0 +1,90 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [3.41.5-termux-2] - 2026-04-13
+
+### Fixed
+- **`flutter build linux` on device**: `post_install.sh` sed command used `|` delimiter which collided with `||` in Dart source code, silently failing. Changed to `@` delimiter
+- **`build.py` sync duplicating directories**: `cp -r` caused nested `scripts/scripts/` dirs. Fixed to use `cp -a {src}/. {dst}/`
+- **flutter_tools snapshot not rebuilt**: Added `rm -f flutter_tools.stamp` and `rm -f flutter_tools.snapshot` after patching `build_linux.dart` to force Dart VM to pick up changes
+
+### Added
+- `UPGRADE_GUIDE.md` — complete step-by-step guide for upgrading to new Flutter versions
+- `.gitignore` patterns for temp scripts (`fix_*.sh`, `test_*.sh`, etc.)
+- E2E test script `gh_e2e_test.sh` for automated clean-install verification from GitHub Release
+
+### Verified (E2E from GitHub Release)
+- Download .deb → dpkg install → post_install.sh → flutter create → build apk → build linux: **ALL PASS**
+
+---
+
+## [3.41.5-termux] - 2026-03-25
+
+### Added
+- Flutter version upgrade: 3.35.0 → 3.41.5 (Dart 3.11.3)
+- **Linux release/profile engine builds**: `build_all()` now compiles all three Linux modes (debug, release, profile)
+- Full build matrix verified on device (6/6): Linux debug/release/profile + APK debug/release/profile
+
+### Fixed
+- **`flutter build linux` (release/profile) failure**: `build_all()` was only building debug mode engine for Linux, leaving `linux_release_arm64/` and `linux_profile_arm64/` empty in the deb package
+- **`utils.py __MODE__` ordering bug**: Original order `('release', 'debug', 'profile')` caused `Output.any` to select release (product mode) dart-sdk snapshots when release directory exists, breaking the entire Flutter CLI. Fixed to `('debug', 'release', 'profile')`
+
+### Technical Details
+- Build output now includes 5 directories: `linux_debug_arm64/`, `linux_release_arm64/`, `linux_profile_arm64/`, `android_release_arm64/`, `android_profile_arm64/`
+- `build_all()` expanded from 8 to 12 steps to include Linux release/profile configure+build
+- Deb package size increased from ~541MB to ~662MB due to additional engine artifacts
+
+---
+
+## [3.35.0-termux] - 2026-01-07
+
+### Added
+- Full Flutter 3.35.0 support for Termux ARM64
+- `flutter build apk` support (ARM64 only, debug/profile/release modes)
+- `flutter build linux` support
+- `flutter run` with Hot Reload support (all modes: debug/profile/release)
+- Linux desktop app support via Termux X11
+- One-command installation script (`install_flutter_complete.sh`)
+- Automatic NDK clang wrapper configuration
+- Android SDK integration with API 34
+- VM snapshots for Linux profile mode
+
+### Fixed
+- libc++_shared.so symlink issue (was pointing to linker script instead of ELF)
+- NDK clang wrapper detection for multiple NDK versions
+- Dependency conflicts during package upgrades (openjdk-17 vs openjdk-21)
+- Missing Android build tools (d8, dx, aidl, apksigner)
+- libatomic.a stubs for CMake compatibility
+- **Linux profile mode crash** (`_NetworkProfiling` type not found in dart.io)
+  - Root cause: `PropagateIfError()` crashes when no Dart stack frames
+  - Fix: Made network profiling initialization optional in `dart_runtime_hooks.cc`
+- **Gradle auto-downloading new NDK versions** causing build failures
+  - Fix: Auto-set `ANDROID_NDK_HOME` in profile script to use pre-configured NDK
+
+### Known Limitations
+- APK builds only support ARM64 (android-arm64-v8a)
+- ARMv7 (android-arm) not supported due to BoringSSL 32-bit issues
+- x86/x64 Android targets not supported
+
+### Technical Details
+- Cross-compiled from x86_64 Linux (WSL) to ARM64 Bionic
+- Uses NDK r27d with API level 35
+- Patches applied to Flutter Engine, Dart VM, and Skia
+- TLS alignment fixed for Bionic linker compatibility
+
+---
+
+## Version Naming Convention
+
+`{flutter_version}-termux` - e.g., `3.35.0-termux`
+
+- `flutter_version`: Upstream Flutter SDK version
+- `termux`: Indicates this is a Termux-compatible build
+
+## Upgrading
+
+See [UPGRADE_GUIDE.md](UPGRADE_GUIDE.md) for upgrade instructions.

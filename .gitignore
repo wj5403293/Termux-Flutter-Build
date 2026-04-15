@@ -1,0 +1,121 @@
+# =====================================================
+# Termux Flutter WSL .gitignore
+# =====================================================
+
+# ----- 大型構建產物 (不需要版本控制) -----
+flutter/
+sysroot/
+release/
+depot_tools/
+*.deb
+out/
+
+# ----- 臨時文件存檔 -----
+_archive/
+
+# ----- 參考專案 -----
+reference_termux_flutter/
+
+# ----- 舊版子目錄 (遷移後移除) -----
+termux-flutter/
+
+# ----- Python 相關 -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+
+# ----- 日誌文件 -----
+*.log
+*.txt
+!README*.txt
+
+# ----- IDE / 編輯器 -----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ----- 系統文件 -----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----- Node.js (如果有) -----
+node_modules/
+
+# ----- 構建工具緩存 -----
+.cache/
+.ninja_log
+.ninja_deps
+.gclient
+
+# ----- 中間產物 -----
+*.o
+*.a
+*.so.*
+*.dSYM/
+
+# ----- 截圖與臨時測試資源 -----
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# ----- 大型二進制與壓縮包 -----
+*.zip
+*.tar.gz
+*.tar.xz
+*.bin
+*.7z
+*.rar
+
+# ----- 大型 Flutter 構建產物 -----
+gen_snapshot
+gen_snapshot_profile
+impellerc
+data.tar.xz
+
+# ----- 其他 -----
+nul
+
+# ----- 敏感文件 -----
+devices.md
+.claude/
+
+# ----- 臨時開發腳本 -----
+fix_*.sh
+test_*.sh
+check_*.sh
+wsl_*.sh
+e2e_*.sh
+run_*.sh
+build_*.sh
+!build.py
+gradle_*.sh
+strace_*.sh
+copy_*.sh
+setup_*.sh
+device_*.sh
+find_*.sh
+patch.sh
+install.sh
+run.sh
+full_e2e.sh
+clean_e2e_test.sh
+
+# ----- 臨時二進制 / snapshot -----
+*.snapshot
+*.apk
+*.b64
+gen_snapshot_*
+temp_*.*
+
+# ----- 臨時 PowerShell 腳本 -----
+*.ps1

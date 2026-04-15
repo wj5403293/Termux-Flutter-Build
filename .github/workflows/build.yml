@@ -1,0 +1,175 @@
+name: 构建 Termux Flutter
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 目标架构
+        required: true
+        default: arm64
+        type: choice
+        options:
+          - arm64
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-termux-flutter-${{ github.ref }}-${{ inputs.arch || 'arm64' }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
+
+    steps:
+      - name: 构建流程
+        run: |
+          echo "========== Termux Flutter GitHub Actions 构建流程 =========="
+          echo "1. 下載仓库原始码"
+          echo "2. 清理磁盘空間"
+          echo "3. 安裝系統依賴"
+          echo "4. 安裝 Android NDK r27d"
+          echo "5. 配置 depot_tools 與 Python 依賴"
+          echo "6. Clone Flutter 並同步 Engine 依賴"
+          echo "7. 套用补丁並组装 sysroot"
+          echo "8. 执行 build_all 完整构建"
+          echo "9. 解析版本资讯並上传 .deb"
+          echo "=========================================================="
+
+      - name: 下載原始碼
+        uses: actions/checkout@v4
+
+      - name: 清理磁碟空間
+        run: |
+          echo "[步骤 1/8] 清理 GitHub Runner 预设占用空间..."
+          df -h
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo docker system prune -af || true
+          df -h
+          echo "[步骤 1/8] 磁盘清理完成"
+
+      - name: 安裝系統依賴
+        run: |
+          echo "[步骤 2/8] 安裝系統依賴..."
+          sudo apt update
+          sudo apt install -y curl git python3 python3-pip ninja-build pkg-config unzip xz-utils libfreetype-dev
+          echo "[步骤 2/8] 系依赖安裝完成"
+
+      - name: 安裝 Android NDK r27d
+        run: |
+          echo "[步骤 3/8] 检查並安裝 Android NDK r27d..."
+          NDK_DIR=/opt/android-ndk-r27d
+          if [ ! -d "$NDK_DIR" ]; then
+            curl -L --retry 3 https://dl.google.com/android/repository/android-ndk-r27d-linux.zip -o /tmp/android-ndk-r27d-linux.zip
+            sudo unzip -q /tmp/android-ndk-r27d-linux.zip -d /opt
+          fi
+          test -d "$NDK_DIR"
+          echo "[步骤 3/8] Android NDK 已就绪: $NDK_DIR"
+
+      - name: 配置 depot_tools
+        uses: newkdev/setup-depot-tools@v1.0.1
+
+      - name: 安裝 Python 依賴
+        run: |
+          echo "[步骤 4/8] 安裝 Python 依赖..."
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+          echo "[步骤 4/8] Python 依賴安裝完成"
+
+      - name: 提供 vpython3 支援
+        run: |
+          echo "[步骤 5/8] 检查 vpython3..."
+          if ! command -v vpython3 >/dev/null 2>&1; then
+            printf '%s\n' '#!/usr/bin/env bash' 'exec python3 "$@"' | sudo tee /usr/local/bin/vpython3 >/dev/null
+            sudo chmod +x /usr/local/bin/vpython3
+          fi
+          echo "[步骤 5/8] vpython3 已可用"
+
+      - name: 验证工具鏈
+        run: |
+          echo "[步骤 6/8] 验证 gclient / ninja / vpython3 / NDK..."
+          command -v gclient
+          command -v ninja
+          command -v vpython3
+          test -f .gclient
+          test -d /opt/android-ndk-r27d
+          echo "[步骤 6/8] 工具鏈验证完成"
+
+      - name: Clone Flutter
+        run: |
+          echo "[步骤 7/8] Clone Flutter SDK..."
+          python3 build.py clone
+          echo "[步骤 7/8] Flutter SDK 准备完成"
+
+      - name: 同步依賴
+        run: |
+          echo "[步骤 7/8] 开始 gclient sync，同步 Flutter Engine 依賴..."
+          python3 build.py sync
+          echo "[步骤 7/8] Engine 依賴同步完成"
+
+      - name: 套用補丁
+        run: |
+          echo "[步骤 7/8] 套用版本補丁..."
+          python3 build.py patch_engine
+          python3 build.py patch_dart
+          python3 build.py patch_skia
+          python3 build.py patch_flutter_sdk
+          echo "[步骤 7/8] 补丁套用完成"
+
+      - name: 組裝 sysroot
+        run: |
+          echo "[步骤 7/8] 组装 Termux sysroot..."
+          python3 build.py sysroot --arch=${{ inputs.arch }}
+          echo "[步骤 7/8] sysroot 組裝完成"
+
+      - name: 执行完整构建
+        run: |
+          echo "[步骤 8/8] 开始执行 build_all 完整构建..."
+          echo "将依序构建 Linux debug/release/profile、dart、impellerc、const_finder、Android gen_snapshot"
+          python3 build.py build_all --arch=${{ inputs.arch }}
+          echo "[步骤 8/8] build_all 执行完成"
+
+      - name: 解析版本資訊
+        id: meta
+        run: |
+          echo "[附加步骤] 解析发布版本资讯..."
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+          from pathlib import Path
+
+          with open("build.toml", "rb") as f:
+              cfg = tomllib.load(f)
+
+          tag = cfg["flutter"]["tag"]
+          arch = "${{ inputs.arch }}"
+          name = f"flutter-termux-{tag}-{arch}"
+          print(f"tag={tag}")
+          print(f"name={name}")
+          PY
+          echo "[附加步骤] 版本资讯解析完成"
+
+      - name: 上傳构建產物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}
+          path: |
+            flutter_*.deb
+            release/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 建立 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            flutter_*.deb
+            release/*.deb
+          name: Flutter ${{ steps.meta.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
