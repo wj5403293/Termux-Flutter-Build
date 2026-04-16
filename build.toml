@@ -13,7 +13,7 @@ runtime = ['debug'] # debug, release, profile
 gclient = './.gclient'
 root = './engine'
 release = './release'
-jobs = 24  # Ryzen 9950X3D: 32 threads, leave 8 for system
+jobs = 20  # Ryzen 9950X3D: 32 threads, leave 8 for system
 
 # Patches are now version-based: patches/{version}/*.patch
 # build.py will automatically look for patches in patches/{flutter.tag}/
