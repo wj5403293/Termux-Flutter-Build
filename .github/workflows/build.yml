@@ -165,13 +165,11 @@ jobs:
           retention-days: 30
 
       - name: 建立 GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            flutter_*.deb
-            release/*.deb
-          name: Flutter ${{ steps.meta.outputs.tag }}
+          files: '**/*.deb'
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
