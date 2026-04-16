@@ -7,7 +7,7 @@ index e0572a8ea89..1197a6462e3 100644
      argParser.addMultiOption(
        'target-platform',
 -      defaultsTo: <String>['android-arm', 'android-arm64', 'android-x64'],
-+      defaultsTo: <String>['android-arm64']  // Modified for Termux ARM64,
++      defaultsTo: <String>['android-arm64'],  // Modified for Termux ARM64,
        allowed: <String>['android-arm', 'android-arm64', 'android-x64'],
        help: 'The target platform for which the project is compiled.',
      );
