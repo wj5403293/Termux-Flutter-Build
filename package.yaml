@@ -96,14 +96,20 @@ resource:
       out: *cache
     mode: 0o644
 
-  artifacts:
+  flutter_web_sdk:
+    source: $root/bin/cache/flutter_web_sdk
+    output: $out/flutter_web_sdk
+    define:
+      out: *cache
+    mode: 0o755
+
+  engine_common_artifacts:
     source:
       - $root/engine/src/flutter/impeller/compiler/shader_lib
       - $any/flutter_tester
       - $any/font-subset
       - $any/icudtl.dat
       - $any/impellerc
-      - $any/gen_snapshot
       - $any/libpath_ops.so
       - $any/libtessellator.so
       - $any/gen/const_finder.dart.snapshot
@@ -115,6 +121,16 @@ resource:
     test:
       file: $remote/linux-$arch/artifacts.zip
       path: $eng
+
+  linux_gen_snapshot:
+    source:
+      - $any/gen_snapshot
+    output:
+      - $eng/linux-$arch
+    define:
+      any: *any
+      eng: *eng
+    mode: 0o755
 
   flutter_linux_gtk: &gtk
     source:
