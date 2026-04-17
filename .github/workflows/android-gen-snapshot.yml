@@ -1,4 +1,4 @@
-name: 测试 Android gen_snapshot
+name: 编译 Android gen_snapshot
 
 on:
   workflow_dispatch:
@@ -33,108 +33,106 @@ concurrency:
 jobs:
   android-gen-snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
 
     steps:
-      - name: 显示测试流程
+      - name: 1. 显示编译流程
         run: |
           echo "========== Android gen_snapshot 专项测试 =========="
           echo "1. 下载仓库源代码"
-          echo "2. 清理磁盘空间"
-          echo "3. 安装系统依赖与 Android NDK r27d"
-          echo "4. 配置 depot_tools 与 Python 依赖"
-          echo "5. Clone Flutter 并同步 Engine 依赖"
-          echo "6. 应用补丁并组装 sysroot"
-          echo "7. 执行 configure_android"
-          echo "8. 执行 build_android_gen_snapshot"
-          echo "9. 上传日志与 gen_snapshot 产物"
+          echo "2. 安装系统依赖与 Android NDK r28c"
+          echo "3. 配置 depot_tools 与 Python 依赖"
+          echo "4. Clone Flutter 并同步 Engine 依赖"
+          echo "5. 应用补丁并组装 sysroot"
+          echo "6. 执行 configure_android"
+          echo "7. 执行 build_android_gen_snapshot"
+          echo "8. 上传日志与 gen_snapshot 产物"
           echo "================================================="
 
-      - name: 下载源代码
+      - name: 2. 下载源代码
         uses: actions/checkout@v4
 
-      - name: 安装系统依赖
+      - name: 3. 安装系统依赖
         run: |
-          echo "[步骤 2/8] 安装系统依赖..."
+          echo "[步骤 3/8] 安装系统依赖..."
           sudo apt update
           sudo apt install -y curl git ninja-build pkg-config unzip xz-utils libfreetype-dev
-          echo "[步骤 2/8] 系统依赖安装完成"
+          echo "[步骤 3/8] 系统依赖安装完成"
 
-      - name: 安装 Android NDK r27c
+      - name: 4. 安装 Android NDK r28c
         run: |
-          echo "[步骤 3/8] 检查并安装 Android NDK r28c..."
+          echo "[步骤 4/8] 检查并安装 Android NDK r28c..."
           NDK_DIR=/opt/android-ndk-r28c
           if [ ! -d "$NDK_DIR" ]; then
             curl -L --retry 3 https://dl.google.com/android/repository/android-ndk-r28c-linux.zip -o /tmp/android-ndk-r28c-linux.zip
             sudo unzip -q /tmp/android-ndk-r28c-linux.zip -d /opt
           fi
           test -d "$NDK_DIR"
-          echo "[步骤 3/8] Android NDK 已就绪: $NDK_DIR"
+          echo "[步骤 4/8] Android NDK 已就绪: $NDK_DIR"
 
-      - name: 配置 depot_tools
+      - name: 5. 配置 depot_tools
         uses: newkdev/setup-depot-tools@v1.0.1
 
-      - name: 安装 Python 依赖
+      - name: 6. 安装 Python 依赖
         run: |
-          echo "[步骤 4/8] 安装 Python 依赖..."
+          echo "[步骤 6/8] 安装 Python 依赖..."
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          echo "[步骤 4/8] Python 依赖安装完成"
+          echo "[步骤 6/8] Python 依赖安装完成"
 
-      - name: 验证工具链
+      - name: 7. 验证工具链
         run: |
-          echo "[步骤 4/8] 验证 gclient / ninja / vpython3 / NDK..."
+          echo "[步骤 7/8] 验证 gclient / ninja / vpython / NDK..."
           command -v gclient
           command -v ninja
-          command -v vpython3
+          command -v vpython
           test -f .gclient
           test -d /opt/android-ndk-r28c
-          echo "[步骤 4/8] 工具链验证完成"
+          echo "[步骤 7/8] 工具链验证完成"
 
-      - name: Clone Flutter
+      - name: 8. Clone Flutter
         run: |
-          echo "[步骤 5/8] Clone Flutter SDK..."
+          echo "[步骤 8/8] Clone Flutter SDK..."
           python build.py clone
-          echo "[步骤 5/8] Flutter SDK 准备完成"
+          echo "[步骤 8/8] Flutter SDK 准备完成"
 
-      - name: 同步依赖
+      - name: 9. 同步依赖
         run: |
-          echo "[步骤 5/8] 开始 gclient sync，同步 Flutter Engine 依赖..."
+          echo "[步骤 9/8] 开始 gclient sync，同步 Flutter Engine 依赖..."
           python build.py sync
-          echo "[步骤 5/8] Engine 依赖同步完成"
+          echo "[步骤 9/8] Engine 依赖同步完成"
 
-      - name: 应用补丁
+      - name: 10. 应用补丁
         run: |
-          echo "[步骤 6/8] 应用版本补丁..."
+          echo "[步骤 10/8] 应用版本补丁..."
           python build.py patch_engine
           python build.py patch_dart
           python build.py patch_skia
           python build.py patch_flutter_sdk
-          echo "[步骤 6/8] 补丁应用完成"
+          echo "[步骤 10/8] 补丁应用完成"
 
-      - name: 组装 sysroot
+      - name: 11. 组装 sysroot
         run: |
-          echo "[步骤 6/8] 组装 Termux sysroot..."
+          echo "[步骤 11/8] 组装 Termux sysroot..."
           python build.py sysroot --arch=${{ inputs.arch }}
-          echo "[步骤 6/8] sysroot 组装完成"
+          echo "[步骤 11/8] sysroot 组装完成"
 
-      - name: 配置 Android gen_snapshot
+      - name: 12. 配置 Android gen_snapshot
         run: |
           mkdir -p logs
-          echo "[步骤 7/8] 执行 configure_android..."
+          echo "[步骤 12/8] 执行 configure_android..."
           set -o pipefail
           python build.py configure_android --arch=${{ inputs.arch }} --mode=${{ inputs.mode }} 2>&1 | tee logs/01-configure_android.log
-          echo "[步骤 7/8] configure_android 完成"
+          echo "[步骤 12/8] configure_android 完成"
 
-      - name: 构建 Android gen_snapshot
+      - name: 13. 构建 Android gen_snapshot
         run: |
           mkdir -p logs
-          echo "[步骤 8/8] 执行 build_android_gen_snapshot..."
+          echo "[步骤 13/8] 执行 build_android_gen_snapshot..."
           set -o pipefail
           python build.py build_android_gen_snapshot --arch=${{ inputs.arch }} --mode=${{ inputs.mode }} --jobs=${{ inputs.jobs }} 2>&1 | tee logs/02-build_android_gen_snapshot.log
-          echo "[步骤 8/8] build_android_gen_snapshot 完成"
+          echo "[步骤 13/8] build_android_gen_snapshot 完成"
 
-      - name: 解析产物信息
+      - name: 14. 解析产物信息
         id: meta
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
@@ -153,7 +151,7 @@ jobs:
           print(f"artifact={artifact}")
           PY
 
-      - name: 上传 gen_snapshot 产物
+      - name: 15. 上传 gen_snapshot 产物
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -167,7 +165,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: 上传构建日志
+      - name: 16. 上传构建日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
