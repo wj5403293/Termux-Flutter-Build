@@ -161,6 +161,25 @@ This project is **the world's first** to achieve a **complete Flutter developmen
 
 > ✅ **v3.41.5 Release**: All features verified! Including hot reload support!
 
+### 🤖 Default GitHub Actions Release
+
+GitHub Releases now publish the `.deb` built from the `termux` preset by default. The default release target is a Termux-first package rather than the full Linux/profile superset.
+
+The default package is intended to support:
+
+- `flutter doctor`
+- `flutter create`
+- `flutter pub get`
+- `flutter run -d web-server`
+- `flutter build apk --debug`
+- `flutter build apk --release --target-platform android-arm64`
+
+Linux desktop support and all `--profile` support are now opt-in manual workflow presets:
+
+- `termux-linux`
+- `full-no-profile`
+- `full`
+
 ### ✨ Features
 
 - 🪟 Cross-compile entirely within Windows WSL

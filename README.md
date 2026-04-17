@@ -161,6 +161,25 @@ bin/cache/artifacts/engine/
 
 > ✅ **v3.41.5 正式版**：所有功能已驗證可用！包含 hot reload 支援！
 
+### 🤖 GitHub Actions 預設發布內容
+
+GitHub Release 現在預設發布 `termux` preset 構建的 `.deb`，目標是優先保證在 Termux 中直接可用。
+
+預設發布包會以這些能力為準：
+
+- `flutter doctor`
+- `flutter create`
+- `flutter pub get`
+- `flutter run -d web-server`
+- `flutter build apk --debug`
+- `flutter build apk --release --target-platform android-arm64`
+
+Linux desktop 與 `--profile` 不再屬於預設發布內容。如果你需要這些能力，請手動執行 GitHub Actions 並選擇以下 preset：
+
+- `termux-linux`
+- `full-no-profile`
+- `full`
+
 ### ✨ 主要特色
 
 - 🪟 在 Windows WSL 環境下完成交叉編譯
