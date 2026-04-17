@@ -464,6 +464,41 @@ class Build:
             cmd.append(f'-j{jobs}')
         subprocess.run(cmd, check=True)
 
+    def build_flutter_core(self, arch: str, mode: str, root: str = None, jobs: int = None):
+        root = root or self.root
+        jobs = jobs or self.jobs
+        cmd = [
+            'ninja',
+            '-C',
+            utils.target_output(root, arch, mode),
+            'flutter',
+        ]
+        if jobs:
+            cmd.append(f'-j{jobs}')
+        subprocess.run(cmd, check=True)
+
+    def build_linux_desktop(self, arch: str, mode: str, root: str = None, jobs: int = None):
+        root = root or self.root
+        jobs = jobs or self.jobs
+        cmd = [
+            'ninja',
+            '-C',
+            utils.target_output(root, arch, mode),
+            'flutter/shell/platform/linux:flutter_gtk',
+        ]
+        if jobs:
+            cmd.append(f'-j{jobs}')
+        subprocess.run(cmd, check=True)
+
+    def prepare_web_sdk(self, root: str = None):
+        root = Path(root or self.root)
+        flutter_bin = root / 'bin' / 'flutter'
+        subprocess.run(
+            [str(flutter_bin), '--suppress-analytics', 'precache', '--web'],
+            cwd=root,
+            check=True,
+        )
+
     def build_dart(self, arch: str, mode: str, root: str = None, jobs: int = None):
         """Build dart binary for Termux.
 
@@ -727,7 +762,7 @@ class Build:
 
         logger.success('Sync completed')
 
-    def debuild(self, arch: str, output: str = None, root: str = None, **conf):
+    def debuild(self, arch: str, output: str = None, root: str = None, section=None, **conf):
         # Sync files from Windows to WSL before building
         self.sync_windows_to_wsl()
 
@@ -737,7 +772,7 @@ class Build:
         output = output or self.output(arch)
 
         pkg = Package(root=root, arch=arch, **conf)
-        pkg.debuild(output=output)
+        pkg.debuild(output=output, section=section)
 
     def output(self, arch: str):
         if self.release.is_dir():
@@ -746,91 +781,44 @@ class Build:
         else:
             return self.release
 
+    def build_selected(self, arch: str = 'arm64', preset: str = 'termux', jobs: int = None):
+        plan = resolve_preset(preset)
+        jobs = jobs or self.jobs
+
+        if plan.configure_linux_debug:
+            self.configure(arch=arch, mode='debug')
+        if plan.build_flutter_core:
+            self.build_flutter_core(arch=arch, mode='debug', jobs=jobs)
+        if plan.build_dart:
+            self.build_dart(arch=arch, mode='debug', jobs=jobs)
+        if plan.build_impellerc:
+            self.build_impellerc(arch=arch, mode='debug', jobs=jobs)
+        if plan.build_const_finder:
+            self.build_const_finder(arch=arch, mode='debug', jobs=jobs)
+        if plan.prepare_web_sdk:
+            self.prepare_web_sdk()
+
+        if plan.build_linux_desktop:
+            self.build_linux_desktop(arch=arch, mode='debug', jobs=jobs)
+        if plan.build_linux_release:
+            self.configure(arch=arch, mode='release')
+            self.build_linux_desktop(arch=arch, mode='release', jobs=jobs)
+        if plan.build_linux_profile:
+            self.configure(arch=arch, mode='profile')
+            self.build_linux_desktop(arch=arch, mode='profile', jobs=jobs)
+
+        if plan.build_android_release:
+            self.configure_android(arch='arm64', mode='release')
+            self.build_android_gen_snapshot(arch='arm64', mode='release', jobs=jobs)
+        if plan.build_android_profile:
+            self.configure_android(arch='arm64', mode='profile')
+            self.build_android_gen_snapshot(arch='arm64', mode='profile', jobs=jobs)
+
+        if plan.package_deb:
+            self.debuild(arch=arch, output=self.output(arch), section=plan.package_sections)
+
     def build_all(self, arch: str = 'arm64', jobs: int = None):
-        """One-command build for complete Flutter Termux package.
-
-        This builds everything needed for both:
-        - flutter run -d linux (Linux target)
-        - flutter build apk --release --target-platform android-arm64
-
-        Note: Only android-arm64 gen_snapshot is built. Users must use
-        --target-platform android-arm64 when building APKs.
-
-        Technical limitation analysis (2025-12-28):
-        ============================================
-        We tested compiling gen_snapshot for android-arm and android-x64:
-
-        1. android-arm64: ✅ Works
-           - Host=ARM64, Target=ARM64, same architecture
-
-        2. android-arm (32-bit): ❌ Fails
-           - BoringSSL has shift overflow errors (e.g., `r0 << 63` on 32-bit type)
-           - The GN build system compiles host tool dependencies for target arch
-           - Would require extensive patches to BoringSSL and build system
-
-        3. android-x64: ❌ Fails
-           - ARM64 sysroot headers incompatible with x64 compilation
-           - Cross-architecture compilation fundamentally not supported
-
-        Root cause: Flutter Engine's GN build system assumes host and target
-        are compatible architectures. It doesn't properly separate host toolchain
-        (ARM64) from target compilation (ARM32/x64).
-
-        Usage:
-            python3 build.py build_all --arch=arm64
-        """
-        logger.info('=== Starting complete Flutter Termux build ===')
-
-        # Step 1: Build Linux debug (for flutter run -d linux --debug)
-        logger.info('[1/12] Configuring Linux debug...')
-        self.configure(arch=arch, mode='debug')
-
-        logger.info('[2/12] Building Flutter engine + dart...')
-        self.build(arch=arch, mode='debug', jobs=jobs)
-        self.build_dart(arch=arch, mode='debug', jobs=jobs)
-
-        # Step 3: Build impellerc (for shader compilation)
-        logger.info('[3/12] Building impellerc...')
-        self.build_impellerc(arch=arch, mode='debug', jobs=jobs)
-
-        # Step 4: Build const_finder (for icon tree shaking)
-        logger.info('[4/12] Building const_finder...')
-        self.build_const_finder(arch=arch, mode='debug', jobs=jobs)
-
-        # Step 5: Build Linux release (for flutter build linux)
-        logger.info('[5/12] Configuring Linux release...')
-        self.configure(arch=arch, mode='release')
-
-        logger.info('[6/12] Building Flutter engine (release)...')
-        self.build(arch=arch, mode='release', jobs=jobs)
-
-        # Step 7: Build Linux profile (for flutter run -d linux --profile)
-        logger.info('[7/12] Configuring Linux profile...')
-        self.configure(arch=arch, mode='profile')
-
-        logger.info('[8/12] Building Flutter engine (profile)...')
-        self.build(arch=arch, mode='profile', jobs=jobs)
-
-        # Step 9: Build Android gen_snapshot (only arm64 supported)
-        # Due to Dart VM cross-compilation limitations, we can only build
-        # gen_snapshot for android-arm64. android-arm and android-x64 require
-        # patching the Dart VM signal handler code.
-        logger.info('[9/12] Building Android gen_snapshot release (arm64 only)...')
-        self.configure_android(arch='arm64', mode='release')
-        self.build_android_gen_snapshot(arch='arm64', mode='release', jobs=jobs)
-
-        # Step 10: Build Android gen_snapshot profile mode
-        logger.info('[10/12] Building Android gen_snapshot profile (arm64 only)...')
-        self.configure_android(arch='arm64', mode='profile')
-        self.build_android_gen_snapshot(arch='arm64', mode='profile', jobs=jobs)
-
-        # Step 11: Package deb
-        logger.info('[11/12] Packaging deb...')
-        self.debuild(arch=arch, output=self.output(arch))
-
-        logger.info('[12/12] Build complete!')
-        logger.info(f'Output: {self.output(arch)}')
-        logger.info('Note: Users must use --target-platform android-arm64 when building APKs')
+        self.build_selected(arch=arch, preset='full', jobs=jobs)
 
     # TODO: check gclient and ninja existence
     def __call__(self):
