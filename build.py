@@ -9,6 +9,7 @@ import utils
 import shutil
 import tomllib
 import subprocess
+from dataclasses import dataclass
 from loguru import logger
 from pathlib import Path
 from sysroot import Sysroot
@@ -38,6 +39,149 @@ def copy_if_needed(src: str, dst: str) -> bool:
     dst_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(src_path, dst_path)
     return True
+
+
+TERMUX_PACKAGE_SECTIONS = [
+    'flutter',
+    'flutter_gpu',
+    'sky_engine',
+    'dart_sdk',
+    'dart_bin',
+    'dart_snapshots',
+    'dartaotruntime',
+    'dartdev_aot',
+    'frontend_server_aot',
+    'flutter_web_sdk',
+    'engine_common_artifacts',
+    'flutter_patched_sdk',
+    'flutter_patched_sdk_product',
+    'executable',
+    'profile',
+    'stamps',
+    'android_gen_snapshot_arm64',
+    'vm_snapshots',
+    'post_install',
+]
+
+TERMUX_LINUX_EXTRA = [
+    'linux_gen_snapshot',
+    'flutter_linux_gtk',
+    'flutter_linux_gtk_release',
+]
+
+FULL_PROFILE_EXTRA = [
+    'flutter_linux_gtk_profile',
+    'android_gen_snapshot_arm64_profile',
+]
+
+
+@dataclass(frozen=True)
+class BuildPreset:
+    name: str
+    package_sections: list[str]
+    package_deb: bool
+    prepare_web_sdk: bool
+    configure_linux_debug: bool
+    build_flutter_core: bool
+    build_dart: bool
+    build_impellerc: bool
+    build_const_finder: bool
+    build_linux_desktop: bool
+    build_linux_release: bool
+    build_linux_profile: bool
+    build_android_release: bool
+    build_android_profile: bool
+
+
+PRESETS = {
+    'termux': BuildPreset(
+        name='termux',
+        package_sections=TERMUX_PACKAGE_SECTIONS,
+        package_deb=True,
+        prepare_web_sdk=True,
+        configure_linux_debug=True,
+        build_flutter_core=True,
+        build_dart=True,
+        build_impellerc=True,
+        build_const_finder=True,
+        build_linux_desktop=False,
+        build_linux_release=False,
+        build_linux_profile=False,
+        build_android_release=True,
+        build_android_profile=False,
+    ),
+    'termux-linux': BuildPreset(
+        name='termux-linux',
+        package_sections=TERMUX_PACKAGE_SECTIONS + TERMUX_LINUX_EXTRA,
+        package_deb=True,
+        prepare_web_sdk=True,
+        configure_linux_debug=True,
+        build_flutter_core=True,
+        build_dart=True,
+        build_impellerc=True,
+        build_const_finder=True,
+        build_linux_desktop=True,
+        build_linux_release=True,
+        build_linux_profile=False,
+        build_android_release=True,
+        build_android_profile=False,
+    ),
+    'full-no-profile': BuildPreset(
+        name='full-no-profile',
+        package_sections=TERMUX_PACKAGE_SECTIONS + TERMUX_LINUX_EXTRA,
+        package_deb=True,
+        prepare_web_sdk=True,
+        configure_linux_debug=True,
+        build_flutter_core=True,
+        build_dart=True,
+        build_impellerc=True,
+        build_const_finder=True,
+        build_linux_desktop=True,
+        build_linux_release=True,
+        build_linux_profile=False,
+        build_android_release=True,
+        build_android_profile=False,
+    ),
+    'full': BuildPreset(
+        name='full',
+        package_sections=TERMUX_PACKAGE_SECTIONS + TERMUX_LINUX_EXTRA + FULL_PROFILE_EXTRA,
+        package_deb=True,
+        prepare_web_sdk=True,
+        configure_linux_debug=True,
+        build_flutter_core=True,
+        build_dart=True,
+        build_impellerc=True,
+        build_const_finder=True,
+        build_linux_desktop=True,
+        build_linux_release=True,
+        build_linux_profile=True,
+        build_android_release=True,
+        build_android_profile=True,
+    ),
+    'android-release-only': BuildPreset(
+        name='android-release-only',
+        package_sections=[],
+        package_deb=False,
+        prepare_web_sdk=False,
+        configure_linux_debug=False,
+        build_flutter_core=False,
+        build_dart=False,
+        build_impellerc=False,
+        build_const_finder=False,
+        build_linux_desktop=False,
+        build_linux_release=False,
+        build_linux_profile=False,
+        build_android_release=True,
+        build_android_profile=False,
+    ),
+}
+
+
+def resolve_preset(name: str) -> BuildPreset:
+    try:
+        return PRESETS[name]
+    except KeyError as exc:
+        raise ValueError(f'unknown preset: {name}') from exc
 
 
 @utils.record
