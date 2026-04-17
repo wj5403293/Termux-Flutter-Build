@@ -7,6 +7,7 @@ This design changes the default CI release target from "build everything" to "pu
 - `flutter doctor`
 - `flutter create`
 - `flutter pub get`
+- `flutter run -d web-server`
 - `flutter build apk --debug`
 - `flutter build apk --release --target-platform android-arm64`
 
@@ -62,6 +63,7 @@ Build scope:
 - `dart`
 - `dartaotruntime`
 - `frontend_server_aot`
+- web runtime/cache artifacts needed by `flutter run -d web-server`
 - VM snapshots required for `flutter build apk --debug`
 - `impellerc`
 - `const_finder`
@@ -195,6 +197,7 @@ The selected build logic should reason in terms of independent target switches:
 - Linux release GN configure
 - Linux profile GN configure
 - core host build for Flutter CLI artifacts
+- web runtime/cache artifact preparation
 - Linux desktop embedder build
 - `build_dart`
 - `build_impellerc`
@@ -236,6 +239,7 @@ The default published `.deb` is the `termux` package, not the full package.
 Restructure packaging resources in `package.yaml` into logical groups that map to presets:
 
 - core Termux CLI resources
+- web resources
 - Android release resources
 - Linux desktop resources
 - profile resources
@@ -250,6 +254,7 @@ The implementation may express this either as explicit named sections or as reso
 - `dartaotruntime`
 - Dart snapshots needed by Flutter CLI
 - `frontend_server_aot`
+- web runtime/cache artifacts needed for `flutter run -d web-server`
 - VM snapshots needed for `flutter build apk --debug`
 - `impellerc`
 - `const_finder`
@@ -346,6 +351,7 @@ The implementation is complete when all of the following are true:
   - `flutter doctor`
   - `flutter create`
   - `flutter pub get`
+  - `flutter run -d web-server`
   - `flutter build apk --debug`
   - `flutter build apk --release --target-platform android-arm64`
 - Linux desktop and all profile support are opt-in only
