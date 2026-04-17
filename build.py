@@ -41,6 +41,10 @@ def copy_if_needed(src: str, dst: str) -> bool:
     return True
 
 
+def resolve_ndk_path(configured_ndk: str | None) -> str | None:
+    return os.environ.get('ANDROID_NDK') or configured_ndk
+
+
 TERMUX_PACKAGE_SECTIONS = [
     'flutter',
     'flutter_gpu',
@@ -200,7 +204,7 @@ class Build:
         with open(conf, 'rb') as f:
             cfg = tomllib.load(f)
 
-        ndk = cfg['ndk'].get('path') or os.environ.get('ANDROID_NDK')
+        ndk = resolve_ndk_path(cfg['ndk'].get('path'))
         api = cfg['ndk'].get('api')
         tag = cfg['flutter'].get('tag')
         repo = cfg['flutter'].get('repo')

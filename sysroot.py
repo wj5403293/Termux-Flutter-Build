@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import os
+import json
 import utils
+import hashlib
 import pathlib
 import asyncio
 import aiohttp
@@ -126,11 +128,54 @@ class Sysroot:
 
         self.data[name] = {'repo': repo, 'dist': dist, 'pkgs': pkgs}
 
+    def _manifest_path(self):
+        return self.path / '.termux-sysroot-manifest.json'
+
+    def _manifest_payload(self, arch: str):
+        normalized = {
+            name: {
+                'repo': item['repo'],
+                'dist': item['dist'],
+                'pkgs': list(item['pkgs']),
+            }
+            for name, item in sorted(self.data.items())
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(normalized, sort_keys=True).encode('utf-8')
+        ).hexdigest()
+        return {
+            'schema': 1,
+            'arch': arch,
+            'sources': normalized,
+            'fingerprint': fingerprint,
+        }
+
+    def _manifest_matches(self, arch: str):
+        path = self._manifest_path()
+        if not path.exists():
+            return False
+
+        try:
+            cached = json.loads(path.read_text(encoding='utf-8'))
+        except json.JSONDecodeError:
+            return False
+        return cached == self._manifest_payload(arch)
+
+    def _write_manifest(self, arch: str):
+        self._manifest_path().write_text(
+            json.dumps(self._manifest_payload(arch), indent=2, sort_keys=True),
+            encoding='utf-8',
+        )
+
     def __call__(self, arch: str):
         arch = utils.termux_arch(arch)
 
         if self.data:
+            if self._manifest_matches(arch):
+                logger.info('sysroot manifest hit, skipping download')
+                return
             asyncio.run(_work(self.path, arch, *self.data.values()))
+            self._write_manifest(arch)
         else:
             logger.info('no work to do.')
 
