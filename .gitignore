@@ -85,6 +85,7 @@ data.tar.xz
 
 # ----- 其他 -----
 nul
+.worktrees/
 
 # ----- 敏感文件 -----
 devices.md
