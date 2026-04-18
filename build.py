@@ -40,10 +40,20 @@ def copy_if_needed(src: str, dst: str) -> bool:
     shutil.copy(src_path, dst_path)
     return True
 
+def ensure_symlink(path: Path, target: Path):
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() and path.resolve() == target.resolve():
+            return
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.symlink_to(target)
 
 def resolve_ndk_path(configured_ndk: str | None) -> str | None:
     return os.environ.get('ANDROID_NDK') or configured_ndk
-
 
 TERMUX_PACKAGE_SECTIONS = [
     'flutter',
