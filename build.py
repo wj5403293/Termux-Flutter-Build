@@ -242,8 +242,7 @@ class Build:
 
         if isinstance(patches, dict):
             self.patches = {}
-            # Version-based patches: patches/{version}/*.patch
-            patch_base = path / patches.get('dir', './patches') / self.tag
+            patch_base = path / patches.get('dir', './patches')
 
             def patch(key):
                 return lambda: self.patch(**self.patches[key])
