@@ -22,6 +22,14 @@ class WorkflowConfigTests(unittest.TestCase):
         upload = next(step for step in steps if step.get("uses") == "actions/upload-artifact@v4")
         self.assertEqual(upload["with"]["compression-level"], "0")
 
+    def test_upload_artifact_includes_root_deb_files(self):
+        steps = self.workflow["jobs"]["build"]["steps"]
+        upload = next(step for step in steps if step.get("uses") == "actions/upload-artifact@v4")
+        path_spec = upload["with"]["path"]
+        lines = [line.strip() for line in path_spec.splitlines() if line.strip()]
+
+        self.assertIn("*.deb", lines)
+
     def test_ndk_install_step_uses_temp_extract_dir(self):
         steps = self.workflow["jobs"]["build"]["steps"]
         install = next(step for step in steps if step.get("name") == "安装 Android NDK r28c")

@@ -142,6 +142,7 @@ jobs:
         with:
           name: ${{ env.EFFECTIVE_PRESET }}-${{ env.ARCH }}
           path: |
+            *.deb
             release/*.deb
             logs/*.log
             flutter/engine/src/out/android_release_arm64/clang_arm64/gen_snapshot
