@@ -36,12 +36,12 @@ python3 build.py debuild --arch=arm64                     # Package .deb
 | File | Role |
 |------|------|
 | `build.py` | CLI entry point (Python Fire). `Build` class holds all commands. |
-| `build.toml` | Config: Flutter version, NDK path, sync paths, sysroot packages, patch locations |
+| `build.toml` | Config: Flutter version, NDK path, sysroot packages, patch locations |
 | `sysroot.py` | `Sysroot` class downloads Termux `.deb` packages async (aiohttp) and extracts into sysroot |
 | `package.py` | `Package` class reads `package.yaml`, resolves variable substitution, creates `.deb` |
 | `package.yaml` | Declarative artifact mapping: build output paths → Termux install paths |
 | `utils.py` | Helpers: arch mapping (`arm64→aarch64`), output path resolution, Termux detection |
-| `patches/{version}/` | Git patches for Engine, Dart VM, Skia (version-specific) |
+| `patches/` | Four shared patch files applied directly from the root patch directory |
 
 ## Critical Implementation Details
 

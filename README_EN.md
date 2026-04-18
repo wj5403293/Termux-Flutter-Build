@@ -161,11 +161,25 @@ This project is **the world's first** to achieve a **complete Flutter developmen
 
 > ✅ **v3.41.5 Release**: All features verified! Including hot reload support!
 
-### 🤖 Default GitHub Actions Release
+### 🤖 GitHub Actions Release Flow
 
-GitHub Releases now publish the `.deb` built from the `termux` preset by default. The default release target is a Termux-first package rather than the full Linux/profile superset.
+GitHub Actions now uses manual dispatch only.
 
-The default package is intended to support:
+The release version is taken directly from `build.toml`:
+
+```toml
+[flutter]
+tag = "3.41.5"
+```
+
+After editing that value and running the workflow manually, the pipeline will automatically:
+
+- clone the matching Flutter tag
+- apply the four fixed patches from the root `patches/` directory
+- build the `.deb`
+- publish a GitHub Release using the same plain tag: `3.41.5`
+
+The default `termux` package is intended to support:
 
 - `flutter doctor`
 - `flutter create`
@@ -174,7 +188,7 @@ The default package is intended to support:
 - `flutter build apk --debug`
 - `flutter build apk --release --target-platform android-arm64`
 
-Linux desktop support and all `--profile` support are now opt-in manual workflow presets:
+Linux desktop support and all `--profile` support are not part of the default `termux` package. They remain available as opt-in manual workflow presets:
 
 - `termux-linux`
 - `full-no-profile`
