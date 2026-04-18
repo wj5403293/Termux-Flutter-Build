@@ -81,12 +81,12 @@ class BuildSelectedTests(unittest.TestCase):
         self.assertNotIn(("configure_android", "profile"), runner.events)
         self.assertTrue(any(event[0] == "package" for event in runner.events))
 
-    def test_android_release_only_skips_packaging(self):
+    def test_full_preset_still_packages(self):
         runner = RecordingBuild()
-        runner.build_selected(arch="arm64", preset="android-release-only", jobs=4)
+        runner.build_selected(arch="arm64", preset="full", jobs=4)
 
         self.assertIn(("android", "release"), runner.events)
-        self.assertFalse(any(event[0] == "package" for event in runner.events))
+        self.assertTrue(any(event[0] == "package" for event in runner.events))
 
 
 if __name__ == "__main__":

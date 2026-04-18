@@ -172,22 +172,6 @@ PRESETS = {
         build_android_release=True,
         build_android_profile=True,
     ),
-    'android-release-only': BuildPreset(
-        name='android-release-only',
-        package_sections=[],
-        package_deb=False,
-        prepare_web_sdk=False,
-        configure_linux_debug=False,
-        build_flutter_core=False,
-        build_dart=False,
-        build_impellerc=False,
-        build_const_finder=False,
-        build_linux_desktop=False,
-        build_linux_release=False,
-        build_linux_profile=False,
-        build_android_release=True,
-        build_android_profile=False,
-    ),
 }
 
 

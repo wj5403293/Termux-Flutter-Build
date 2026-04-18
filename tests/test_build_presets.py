@@ -17,12 +17,9 @@ class ResolvePresetTests(unittest.TestCase):
         self.assertIn("flutter_web_sdk", plan.package_sections)
         self.assertNotIn("flutter_linux_gtk_profile", plan.package_sections)
 
-    def test_android_release_only_skips_packaging(self):
-        plan = resolve_preset("android-release-only")
-
-        self.assertTrue(plan.build_android_release)
-        self.assertFalse(plan.package_deb)
-        self.assertEqual(plan.package_sections, [])
+    def test_unknown_removed_android_release_only_preset_raises(self):
+        with self.assertRaises(ValueError):
+            resolve_preset("android-release-only")
 
     def test_unknown_preset_raises_value_error(self):
         with self.assertRaises(ValueError):
