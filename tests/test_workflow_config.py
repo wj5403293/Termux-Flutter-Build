@@ -39,6 +39,23 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertIn('mv "$TMP_NDK_DIR/android-ndk-r28c" "$ANDROID_NDK"', script)
         self.assertNotIn('mv "$(dirname "$ANDROID_NDK")/android-ndk-r28c" "$ANDROID_NDK"', script)
 
+    def test_workflow_does_not_add_extra_vpython_wrapper(self):
+        steps = self.workflow["jobs"]["build"]["steps"]
+        names = [step.get("name") for step in steps]
+
+        self.assertNotIn("提供 vpython 支持", names)
+
+        verify = next(step for step in steps if step.get("name") == "验证工具链")
+        self.assertNotIn("command -v vpython", verify["run"])
+
+    def test_workflow_does_not_cache_sysroot_or_ndk(self):
+        steps = self.workflow["jobs"]["build"]["steps"]
+        uses = [step.get("uses") for step in steps]
+        names = [step.get("name") for step in steps]
+
+        self.assertNotIn("actions/cache@v4", uses)
+        self.assertNotIn("恢复 sysroot 和 NDK 缓存", names)
+
     def test_manual_dispatch_updates_fixed_release_tag(self):
         env = self.workflow["jobs"]["build"]["env"]
         self.assertEqual(env["MANUAL_RELEASE_TAG"], "termux-manual-test")

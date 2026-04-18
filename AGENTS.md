@@ -49,7 +49,7 @@ python3 build.py debuild --arch=arm64                     # Package .deb
 2. **Only ARM64 APK gen_snapshot works**. 32-bit ARM fails (BoringSSL), x64 fails (sysroot mismatch).
 3. **Linux target builds all three modes** (debug, release, profile). `build_all()` runs configure+build for each mode.
 4. **`package.yaml` uses `eval()`** for variable resolution — be careful with template strings.
-5. **`debuild()` auto-syncs** from Windows to WSL via `[sync]` config before packaging.
+5. **`debuild()` no longer auto-syncs** from Windows to WSL before packaging. CI and local packaging both use the current workspace directly.
 6. **GN flag `is_termux=true`** activates custom BUILD.gn rules that add `-llog -lm` for Android logging symbols.
 7. **`utils.py __MODE__` must be `('debug', 'release', 'profile')`** — debug first! `Output.any` picks the first existing directory. If release comes first, `output.any` points to release (product mode) dart-sdk snapshots, breaking the entire Flutter CLI.
 

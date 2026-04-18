@@ -213,7 +213,6 @@ class Build:
         mode = cfg['build'].get('runtime')
         gclient = cfg['build'].get('gclient')
         jobs = cfg['build'].get('jobs')
-        sync_cfg = cfg.get('sync', {})
         sysroot = cfg['sysroot']
         syspath = sysroot.pop('path')
         package = cfg['package'].get('conf')
@@ -240,7 +239,6 @@ class Build:
         self.release = path/release
         self.toolchain = Path(ndk, f'toolchains/llvm/prebuilt/{self.host}')
         self.jobs = jobs
-        self.sync_cfg = sync_cfg
 
         if not self.release.parent.is_dir():
             raise ValueError(f'bad release path: "{release}"')
@@ -271,6 +269,13 @@ class Build:
         logger.info('\n'+'\n'.join(info))
 
     def android_sdk_root(self, root: str = None, ndk_root: str = None):
+        """创建 Flutter Android 构建默认会查找的 SDK 目录。
+
+        Flutter 3.41.5 的 Android 构建默认会在
+        flutter/engine/src/flutter/third_party/android_tools/sdk/ndk/28.2.13676358
+        下查找 NDK。本方法在仓库工作区内创建这个目录，并把它符号链接到
+        实际安装好的 NDK 路径，避免改动 Flutter 上游 GN 逻辑。
+        """
         root = Path(root or Path(__file__).parent)
         if ndk_root:
             ndk_root = Path(ndk_root).resolve()
@@ -279,38 +284,10 @@ class Build:
         sdk_root = root / 'engine' / 'src' / 'flutter' / 'third_party' / 'android_tools' / 'sdk'
         ndk_dir = sdk_root / 'ndk'
         ndk_version_dir = ndk_dir / '28.2.13676358'
-        clang_dir = ndk_root / 'toolchains' / 'llvm' / 'prebuilt' / 'linux-x86_64' / 'lib' / 'clang'
 
         ndk_dir.mkdir(parents=True, exist_ok=True)
-        if ndk_version_dir.exists() or ndk_version_dir.is_symlink():
-            if ndk_version_dir.resolve() == ndk_root.resolve():
-                self.ensure_android_ndk_clang_alias(clang_dir)
-                return str(sdk_root)
-            if ndk_version_dir.is_dir() and not ndk_version_dir.is_symlink():
-                shutil.rmtree(ndk_version_dir)
-            else:
-                ndk_version_dir.unlink()
-
-        ndk_version_dir.symlink_to(ndk_root)
-        self.ensure_android_ndk_clang_alias(clang_dir)
+        ensure_symlink(ndk_version_dir, ndk_root)
         return str(sdk_root)
-
-    def ensure_android_ndk_clang_alias(self, clang_dir: Path, expected_version: str = '19'):
-        if not clang_dir.exists():
-            return
-
-        expected_dir = clang_dir / expected_version
-        if expected_dir.exists():
-            return
-
-        actual_versions = sorted(
-            p for p in clang_dir.iterdir()
-            if p.is_dir() and p.name.replace('.', '').isdigit()
-        )
-        if not actual_versions:
-            return
-
-        expected_dir.symlink_to(actual_versions[-1].name)
 
     def clone(self, *, url: str = None, tag: str = None, out: str = None):
         url = url or self.repo
@@ -706,70 +683,7 @@ class Build:
         logger.warning('gen_snapshot not found at expected paths')
         return None
 
-    def sync_windows_to_wsl(self):
-        """Sync files from Windows to WSL before debuild.
-
-        This prevents the common issue of editing files on Windows
-        but building in WSL with stale copies.
-        """
-        import platform
-
-        if not self.sync_cfg:
-            logger.debug('No sync config, skipping')
-            return
-
-        system = platform.system()
-        is_windows = system == 'Windows'
-        is_wsl = system == 'Linux' and (
-            'microsoft' in platform.release().lower() or
-            bool(os.environ.get('WSL_DISTRO_NAME'))
-        )
-
-        # GitHub-hosted Ubuntu runners are plain Linux, not WSL.
-        if not is_windows and not is_wsl:
-            logger.debug('Not running on Windows/WSL, skipping sync')
-            return
-
-        windows_root = self.sync_cfg.get('windows_root')
-        wsl_root = self.sync_cfg.get('wsl_root')
-        paths = self.sync_cfg.get('paths', [])
-
-        if not windows_root or not wsl_root:
-            logger.warning('sync config incomplete, skipping')
-            return
-
-        # Convert Windows path to WSL mount path
-        wsl_mount = '/mnt/' + windows_root[0].lower() + windows_root[2:].replace('\\', '/')
-
-        for p in paths:
-            src = f"{wsl_mount}/{p}"
-            dst = f"{wsl_root}/{p}"
-            # Ensure dst exists
-            if is_wsl:
-                subprocess.run(['bash', '-c', f"mkdir -p {dst}"], check=False)
-            else:
-                subprocess.run(['wsl', '-e', 'bash', '-c', f"mkdir -p {dst}"], check=False)
-                
-            if '.' in p.split('/')[-1] and not src.endswith('/'):
-                 # It's a file
-                 cmd = f"cp -a {src} {dst}"
-            else:
-                 # It's a directory
-                 cmd = f"cp -a {src}/. {dst}/"
-            logger.info(f'Syncing: {p}')
-            if is_wsl:
-                # Running in WSL, execute directly
-                subprocess.run(['bash', '-c', cmd], check=False)
-            else:
-                # Running in Windows, use wsl command
-                subprocess.run(['wsl', '-e', 'bash', '-c', cmd], check=False)
-
-        logger.success('Sync completed')
-
     def debuild(self, arch: str, output: str = None, root: str = None, section=None, **conf):
-        # Sync files from Windows to WSL before building
-        self.sync_windows_to_wsl()
-
         conf = conf or self.package
         # root is Flutter SDK root (flutter/), set from [flutter].path in build.toml
         root = root or self.root
