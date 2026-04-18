@@ -2,7 +2,17 @@
 
 ## Summary
 
-This design changes the default CI release target from "build everything" to "publish the smallest package that is directly usable inside Termux". The default package must support:
+This design makes GitHub Actions a manual-release pipeline only.
+
+The workflow must:
+
+- trigger only by `workflow_dispatch`
+- take the Flutter version only from `build.toml`
+- publish a GitHub Release automatically after a successful manual run
+- use the exact `build.toml` version string as the GitHub Release tag
+- keep the default package focused on Termux-first behavior
+
+The default package must support:
 
 - `flutter doctor`
 - `flutter create`
@@ -11,37 +21,41 @@ This design changes the default CI release target from "build everything" to "pu
 - `flutter build apk --debug`
 - `flutter build apk --release --target-platform android-arm64`
 
-Linux desktop support and all `--profile` support move to opt-in presets.
+Linux desktop support and all `--profile` support remain opt-in presets.
 
 ## Problem
 
-The current GitHub Actions workflow is slow because it runs a cold-start, single-job, full release build every time:
+The previous CI design had too many moving parts:
 
-- installs dependencies on a fresh `ubuntu-latest` runner
-- downloads and unpacks Android NDK
-- clones Flutter and runs `gclient sync`
-- assembles the Termux sysroot
-- builds Linux `debug`, `release`, and `profile`
-- builds Android `release` and `profile`
-- packages a full `.deb`
+- both tag-triggered and manual-triggered release behavior
+- a special `android-release-only` preset that does not match the main packaging goal
+- patch selection tied to `patches/<flutter-tag>/`
+- duplicated version concepts between workflow release behavior and repository config
 
-This is expensive on GitHub-hosted runners because there is no persistent machine-local checkout or build cache. The biggest improvement available is to compile fewer targets by default, then add limited caching for smaller reusable directories.
+This adds maintenance overhead without helping the actual release flow you want:
+
+- edit `build.toml`
+- manually run the workflow
+- get a `.deb`
+- publish that exact version as a Release
 
 ## Goals
 
-- Make the default GitHub release build target the Termux-first package.
-- Keep all work on GitHub-hosted runners only.
-- Allow manual workflow runs to choose larger build scopes.
-- Keep one main workflow entrypoint.
-- Avoid changing package semantics accidentally for the default release.
-- Keep packaging behavior explicit and predictable.
+- Make `build.toml` the single source of truth for the Flutter version.
+- Remove `push tag` release behavior entirely.
+- Keep only manual workflow execution.
+- Automatically publish a GitHub Release after a successful manual run.
+- Use the exact `build.toml` version string as the Release tag, without adding `v`.
+- Remove `android-release-only`.
+- Stop selecting patches by Flutter tag directory.
+- Flatten `patches/` so the four current patches always apply from one place.
 
 ## Non-Goals
 
-- No self-hosted runners.
-- No artifact handoff pipeline that moves full engine source trees or full build outputs between jobs.
-- No attempt to cache the full Flutter checkout or full `out/` tree on GitHub-hosted runners.
-- No default Linux desktop or `--profile` support in the release package.
+- No workflow input for version selection.
+- No patch directory selection by Flutter version.
+- No self-hosted runner design.
+- No extra CI-only preset that bypasses normal packaging.
 
 ## User-Facing Build Presets
 
@@ -50,8 +64,6 @@ The workflow and build entrypoint will use these presets:
 ### `termux`
 
 Default preset for `workflow_dispatch`.
-
-Also the fixed preset for `push` on `v*` tags.
 
 Purpose:
 
@@ -80,6 +92,7 @@ Produces:
 
 - `.deb`
 - logs
+- GitHub Release
 
 ### `termux-linux`
 
@@ -92,14 +105,11 @@ Build scope:
 - everything from `termux`
 - Linux desktop artifacts for supported non-profile modes
 
-Does not include:
-
-- any `profile` targets
-
 Produces:
 
 - `.deb`
 - logs
+- GitHub Release
 
 ### `full-no-profile`
 
@@ -112,15 +122,11 @@ Build scope:
 - everything from `termux-linux`
 - any remaining non-profile artifacts currently expected by packaging
 
-Does not include:
-
-- Linux `profile`
-- Android `profile`
-
 Produces:
 
 - `.deb`
 - logs
+- GitHub Release
 
 ### `full`
 
@@ -141,6 +147,11 @@ Produces:
 
 - `.deb`
 - logs
+- GitHub Release
+
+### Removed preset
+
+`android-release-only` is removed. It no longer matches the main release model and should not appear in workflow inputs or Python preset resolution.
 
 ## Workflow Design
 
@@ -148,105 +159,135 @@ Keep a single main workflow in `.github/workflows/build.yml`.
 
 ### Triggers
 
-- `push` on `v*` tags:
-  - fixed preset: `termux`
-  - create GitHub Release
-- `workflow_dispatch`:
-  - selectable `preset`
-  - default `preset`: `termux`
+Only:
+
+- `workflow_dispatch`
+
+Remove:
+
+- `push` on tags
 
 ### Workflow Inputs
 
-Keep `arch`, with `arm64` as the only current option.
+Keep:
 
-Add `preset` with these values:
+- `arch`
+- `preset`
 
-- `termux`
-- `termux-linux`
-- `full-no-profile`
-- `full`
-- `android-release-only`
+Do not add a version input. The workflow must read version information from `build.toml`.
 
-`android-release-only` is a manual diagnostics/build-validation preset. It does not package a `.deb`.
+### Version Source
+
+The workflow must parse `build.toml` and derive:
+
+- Flutter checkout version
+- artifact naming
+- GitHub Release tag
+- GitHub Release name
+
+If `build.toml` contains:
+
+```toml
+[flutter]
+tag = "3.41.5"
+```
+
+Then:
+
+- Flutter checkout uses `3.41.5`
+- GitHub Release tag is `3.41.5`
+- Release name also uses `3.41.5`
+
+No automatic `v` prefix should be added.
 
 ### Release Rules
 
-- Only tag-triggered `termux` builds publish a GitHub Release by default.
-- Manual runs upload artifacts and logs.
-- Manual runs for package-producing presets may upload the `.deb` as an artifact, but should not publish a GitHub Release automatically.
+Every successful manual run for a package-producing preset should:
+
+- upload artifacts
+- force-update the Git tag matching the `build.toml` version to the current workflow commit
+- publish or update the GitHub Release using that exact tag
+
+This makes the manual workflow the only release mechanism.
 
 ## Build Script Design
 
 ### New Entry Point
 
-Add a new unified build entrypoint in `build.py`:
+Keep the unified build entrypoint in `build.py`:
 
 `build_selected --arch=arm64 --preset=<preset> --jobs=<n>`
 
-`build_all()` remains as a compatibility wrapper and delegates to `build_selected(preset="full")`.
+`build_all()` remains a compatibility wrapper and delegates to `build_selected(preset="full")`.
 
 ### Preset Resolution
 
-Preset resolution belongs in Python, not in workflow YAML. The workflow passes the preset string; `build.py` maps it to a concrete list of targets and packaging behavior.
+Preset resolution belongs in Python, not in workflow YAML.
 
-### Build Target Model
+Keep:
 
-The selected build logic should reason in terms of independent target switches:
+- `termux`
+- `termux-linux`
+- `full-no-profile`
+- `full`
 
-- Linux debug GN configure
-- Linux release GN configure
-- Linux profile GN configure
-- core host build for Flutter CLI artifacts
-- web runtime/cache artifact preparation
-- Linux desktop embedder build
-- `build_dart`
-- `build_impellerc`
-- `build_const_finder`
-- Android release `configure_android`
-- Android release `build_android_gen_snapshot`
-- Android profile `configure_android`
-- Android profile `build_android_gen_snapshot`
-- package `.deb`
+Remove:
 
-### Split Core Host Build From Linux Desktop Build
+- `android-release-only`
 
-Current `build()` always builds both:
+### Flutter Version Source
 
-- `flutter`
-- `flutter/shell/platform/linux:flutter_gtk`
+`Build.__init__()` may continue reading `[flutter].tag` from `build.toml`.
 
-This forces Linux desktop compilation even when the goal is only a Termux-first package.
+That value is now the authoritative source for:
 
-Refactor this into two build steps:
+- clone tag
+- package version
+- release tag
 
-- `build_flutter_core()`
-  - builds only the host-side `flutter` target and any artifacts needed by CLI packaging
-- `build_linux_desktop()`
-  - builds `flutter_gtk`
+The workflow must not try to override it with a separate user-provided version input.
 
-`termux` skips `build_linux_desktop()` entirely.
+## Patch Layout Design
+
+Patch selection must no longer depend on the Flutter tag.
+
+### Old layout
+
+```text
+patches/3.41.5/engine.patch
+patches/3.41.5/dart.patch
+patches/3.41.5/skia.patch
+patches/3.41.5/flutter_sdk_arm64_default.patch
+```
+
+### New layout
+
+```text
+patches/engine.patch
+patches/dart.patch
+patches/skia.patch
+patches/flutter_sdk_arm64_default.patch
+```
+
+### Implementation rule
+
+In `build.py`, patch base resolution must change from:
+
+- `patches/<self.tag>/...`
+
+to:
+
+- `patches/...`
+
+The four current patch files are treated as version-agnostic until proven otherwise.
+
+Remove old versioned patch directories from the repository once the root-level files are in place.
 
 ## Packaging Design
 
-### Default Packaging Direction
+The default published `.deb` remains the `termux` package, not the full package.
 
-The package system should stop assuming that every preset has every resource.
-
-The default published `.deb` is the `termux` package, not the full package.
-
-### Resource Grouping
-
-Restructure packaging resources in `package.yaml` into logical groups that map to presets:
-
-- core Termux CLI resources
-- web resources
-- Android release resources
-- Linux desktop resources
-- profile resources
-
-The implementation may express this either as explicit named sections or as resource lists built in `build.py`, but the grouping must be clear and stable.
-
-### `termux` Package Must Include
+The package system should continue grouping resources so `termux` includes:
 
 - Flutter SDK files
 - Dart SDK files
@@ -262,100 +303,59 @@ The implementation may express this either as explicit named sections or as reso
 - stamp files needed to suppress unwanted downloads
 - `post_install.sh`
 
-### `termux` Package Must Exclude
-
-- Linux desktop runtime artifacts
-- Linux `flutter_gtk`
-- Linux desktop `gen_snapshot`
-- Android profile `gen_snapshot`
-- Linux profile resources
-
-### Package Production Rules
-
-- `termux`, `termux-linux`, `full-no-profile`, and `full` may produce `.deb` files.
-- `android-release-only` must not call package creation.
+The default package should still exclude Linux desktop and profile-only payloads.
 
 ## GitHub-Hosted Performance Design
 
-### Dynamic Ninja Parallelism
+The workflow should keep:
 
-Do not use the static `jobs = 24` default from `build.toml` on GitHub-hosted runners.
+- dynamic Ninja job count
+- pip cache from `actions/setup-python`
 
-The workflow should compute a runner-appropriate job count from `nproc` and pass it explicitly to `build_selected`.
+The workflow should not rely on:
 
-The goal is stable throughput, not maximum theoretical parallelism.
+- push-tag based release flow
+- extra version inputs
+- Android/sysroot cache restore logic if it provides little real benefit
 
-### Cache Only Smaller, Reusable Directories
-
-Cache these:
-
-- pip cache
-- Dart/pub cache if used during dependency repair
-- workspace-local Android NDK directory
-- assembled `sysroot/`
-
-Do not cache these:
-
-- full `flutter/` checkout
-- full `flutter/engine/src/out/` tree
-
-Reason:
-
-- on GitHub-hosted runners, those large caches are too expensive to upload/download reliably
-- compile-less-by-default gives a better payoff than trying to persist the entire source/build graph
-
-### NDK Path Strategy
-
-The build system should prefer an environment-provided NDK path when present, then fall back to `build.toml`.
-
-This allows the workflow to place the NDK in a cacheable workspace path instead of always unpacking to `/opt`.
-
-### Sysroot Idempotence
-
-Sysroot assembly should become skip-safe.
-
-Add a manifest or stamp that captures:
-
-- target arch
-- sysroot package list from `build.toml`
-- sysroot assembly code signature/version
-
-If the restored `sysroot/` cache matches the manifest, `build.py sysroot` should skip download/extract work.
+The main speed win still comes from compiling fewer targets by default, not from large cache tricks.
 
 ## Explicit Trade-Offs
 
-- `gclient sync` remains expensive on GitHub-hosted runners and will still dominate cold builds.
-- The main speed gain comes from not compiling Linux desktop and profile targets by default.
-- The chosen design optimizes default release time first and preserves full builds as opt-in presets.
-- This design favors predictable package behavior over maximum configurability in the first iteration.
+- Repeated manual runs for the same `build.toml` version will update the same Git tag and GitHub Release.
+- Flattening `patches/` means patch compatibility is now enforced operationally, not by directory structure.
+- This simplifies maintenance, but if a future Flutter version breaks patch compatibility, the break will surface during patch apply or build time.
 
 ## Files Expected To Change During Implementation
 
 - `.github/workflows/build.yml`
-- `.github/workflows/android-gen-snapshot.yml` or its responsibilities folded into `build.yml`
 - `build.py`
-- `package.yaml`
-- optionally `package.py` if section selection needs minor support changes
 - `build.toml`
-- `sysroot.py`
-- documentation files that describe default build/release behavior
+- `package.yaml` only if preset references or packaging metadata need cleanup
+- `patches/engine.patch`
+- `patches/dart.patch`
+- `patches/skia.patch`
+- `patches/flutter_sdk_arm64_default.patch`
+- old versioned patch files under `patches/3.35.0/` and `patches/3.41.5/`
+- tests covering workflow inputs, release behavior, and preset resolution
+- docs that still describe tag-triggered release behavior
 
 ## Acceptance Criteria
 
 The implementation is complete when all of the following are true:
 
-- tag-triggered releases build the `termux` preset by default
-- manual runs can choose all approved presets
-- the `termux` preset produces a `.deb`
-- the published `termux` package is intended to support:
+- `.github/workflows/build.yml` only supports `workflow_dispatch`
+- the workflow no longer supports `push` on tags
+- the workflow input options no longer include `android-release-only`
+- the workflow reads the release version from `build.toml`
+- the workflow publishes GitHub Releases using the exact `build.toml` Flutter tag string, without adding `v`
+- `build.py` no longer resolves patches through `patches/<flutter-tag>/`
+- the repository stores the four active patch files directly under `patches/`
+- old versioned patch directories are removed
+- the default `termux` package is still aimed at:
   - `flutter doctor`
   - `flutter create`
   - `flutter pub get`
   - `flutter run -d web-server`
   - `flutter build apk --debug`
   - `flutter build apk --release --target-platform android-arm64`
-- Linux desktop and all profile support are opt-in only
-- Linux desktop compilation is not part of the default `termux` preset
-- GitHub workflow parallelism is computed dynamically instead of using the local-machine default
-- small reusable caches are enabled
-- sysroot work can be skipped on a valid cache hit
