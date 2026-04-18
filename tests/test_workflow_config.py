@@ -22,6 +22,15 @@ class WorkflowConfigTests(unittest.TestCase):
         upload = next(step for step in steps if step.get("uses") == "actions/upload-artifact@v4")
         self.assertEqual(upload["with"]["compression-level"], "0")
 
+    def test_ndk_install_step_uses_temp_extract_dir(self):
+        steps = self.workflow["jobs"]["build"]["steps"]
+        install = next(step for step in steps if step.get("name") == "安装 Android NDK r28c")
+        script = install["run"]
+
+        self.assertIn("mktemp -d", script)
+        self.assertIn('mv "$TMP_NDK_DIR/android-ndk-r28c" "$ANDROID_NDK"', script)
+        self.assertNotIn('mv "$(dirname "$ANDROID_NDK")/android-ndk-r28c" "$ANDROID_NDK"', script)
+
 
 if __name__ == "__main__":
     unittest.main()

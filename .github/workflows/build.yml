@@ -88,9 +88,11 @@ jobs:
         run: |
           mkdir -p "$(dirname "$ANDROID_NDK")"
           if [ ! -d "$ANDROID_NDK" ]; then
+            TMP_NDK_DIR=$(mktemp -d)
             curl -L --retry 3 https://dl.google.com/android/repository/android-ndk-r28c-linux.zip -o /tmp/android-ndk-r28c-linux.zip
-            unzip -q /tmp/android-ndk-r28c-linux.zip -d "$(dirname "$ANDROID_NDK")"
-            mv "$(dirname "$ANDROID_NDK")/android-ndk-r28c" "$ANDROID_NDK"
+            unzip -q /tmp/android-ndk-r28c-linux.zip -d "$TMP_NDK_DIR"
+            mv "$TMP_NDK_DIR/android-ndk-r28c" "$ANDROID_NDK"
+            rm -rf "$TMP_NDK_DIR"
           fi
           test -d "$ANDROID_NDK"
 

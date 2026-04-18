@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import io
+import os
 import utils
 import string
 import base64
@@ -19,8 +20,21 @@ def explore_file(src: Path):
     assert src.exists()
 
     if src.is_dir():
-        for root, dirs, files in src.walk():
-            rel = root.relative_to(src)
+        walk = getattr(src, 'walk', None)
+        if callable(walk):
+            try:
+                iterator = walk()
+            except AttributeError:
+                iterator = os.walk(src)
+                convert_root = lambda root: Path(root).relative_to(src)
+            else:
+                convert_root = lambda root: root.relative_to(src)
+        else:
+            iterator = os.walk(src)
+            convert_root = lambda root: Path(root).relative_to(src)
+
+        for root, dirs, files in iterator:
+            rel = convert_root(root)
             for it in dirs:
                 yield rel/it
             for it in files:
