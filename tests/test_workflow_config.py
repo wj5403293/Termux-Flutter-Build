@@ -13,14 +13,16 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertEqual(inputs["preset"]["default"], "termux")
         self.assertIn("termux", inputs["preset"]["options"])
         self.assertIn("full", inputs["preset"]["options"])
+        self.assertNotIn("android-release-only", inputs["preset"]["options"])
 
     def test_workflow_uses_python_313(self):
         steps = self.workflow["jobs"]["build"]["steps"]
         setup = next(step for step in steps if step.get("uses") == "actions/setup-python@v5")
         self.assertEqual(setup["with"]["python-version"], "3.13")
 
-    def test_release_still_listens_to_tag_pushes(self):
-        self.assertIn("v*", self.workflow["on"]["push"]["tags"])
+    def test_workflow_only_supports_manual_dispatch(self):
+        self.assertIn("workflow_dispatch", self.workflow["on"])
+        self.assertNotIn("push", self.workflow["on"])
 
     def test_upload_artifact_disables_extra_compression(self):
         steps = self.workflow["jobs"]["build"]["steps"]
@@ -61,24 +63,24 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertNotIn("actions/cache@v4", uses)
         self.assertNotIn("恢复 sysroot 和 NDK 缓存", names)
 
-    def test_manual_dispatch_updates_fixed_release_tag(self):
-        env = self.workflow["jobs"]["build"]["env"]
-        self.assertEqual(env["MANUAL_RELEASE_TAG"], "termux-manual-test")
-
+    def test_manual_dispatch_updates_release_tag_from_build_toml(self):
         steps = self.workflow["jobs"]["build"]["steps"]
-        tag_step = next(step for step in steps if step.get("name") == "更新手动测试标签")
-        self.assertIn("workflow_dispatch", tag_step["if"])
+        meta = next(step for step in steps if step.get("name") == "解析版本信息")
+        tag_step = next(step for step in steps if step.get("name") == "更新发布标签")
+        self.assertIn('cfg["flutter"]["tag"]', meta["run"])
         self.assertIn("git tag -f", tag_step["run"])
+        self.assertIn('${{ steps.meta.outputs.version }}', tag_step["run"])
         self.assertIn('--force', tag_step["run"])
 
-    def test_release_step_supports_manual_dispatch_fixed_release(self):
+    def test_release_step_uses_plain_build_toml_version_tag(self):
         steps = self.workflow["jobs"]["build"]["steps"]
         release = next(step for step in steps if step.get("name") == "建立 GitHub Release")
 
-        self.assertIn("workflow_dispatch", release["if"])
-        self.assertIn("env.MANUAL_RELEASE_TAG", release["with"]["tag_name"])
-        self.assertEqual(release["with"]["prerelease"], "${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}")
-        self.assertEqual(release["with"]["make_latest"], "${{ github.event_name == 'workflow_dispatch' && 'false' || 'true' }}")
+        self.assertNotIn("workflow_dispatch", release.get("if", ""))
+        self.assertEqual(release["with"]["tag_name"], "${{ steps.meta.outputs.version }}")
+        self.assertEqual(release["with"]["name"], "${{ steps.meta.outputs.artifact_name }}")
+        self.assertEqual(release["with"]["prerelease"], "false")
+        self.assertEqual(release["with"]["make_latest"], "true")
 
 
 if __name__ == "__main__":

@@ -20,16 +20,12 @@ on:
           - termux-linux
           - full-no-profile
           - full
-          - android-release-only
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: write
 
 concurrency:
-  group: build-termux-flutter-${{ github.ref }}-${{ inputs.arch || 'arm64' }}-${{ inputs.preset || 'termux' }}
+  group: build-termux-flutter-manual-${{ inputs.arch || 'arm64' }}-${{ inputs.preset || 'termux' }}
   cancel-in-progress: false
 
 jobs:
@@ -37,9 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ARCH: ${{ inputs.arch || 'arm64' }}
-      EFFECTIVE_PRESET: ${{ github.event_name == 'push' && 'termux' || inputs.preset }}
+      EFFECTIVE_PRESET: ${{ inputs.preset || 'termux' }}
       ANDROID_NDK: ${{ github.workspace }}/.cache/android-ndk-r28c
-      MANUAL_RELEASE_TAG: termux-manual-test
 
     steps:
       - name: 下载源代码
@@ -95,6 +90,19 @@ jobs:
           test -f .gclient
           test -d "$ANDROID_NDK"
 
+      - name: 解析版本信息
+        id: meta
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+          with open("build.toml", "rb") as f:
+              cfg = tomllib.load(f)
+          version = cfg["flutter"]["tag"]
+          arch = "${{ env.ARCH }}"
+          print(f"version={version}")
+          print(f"artifact_name=flutter-termux-{version}-{arch}")
+          PY
+
       - name: Clone Flutter
         run: python build.py clone
 
@@ -124,7 +132,7 @@ jobs:
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.EFFECTIVE_PRESET }}-${{ env.ARCH }}
+          name: ${{ steps.meta.outputs.artifact_name }}
           path: |
             *.deb
             release/*.deb
@@ -135,24 +143,22 @@ jobs:
           retention-days: 30
           compression-level: 0
 
-      - name: 更新手动测试标签
-        if: github.event_name == 'workflow_dispatch' && env.EFFECTIVE_PRESET != 'android-release-only'
+      - name: 更新发布标签
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f "$MANUAL_RELEASE_TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$MANUAL_RELEASE_TAG" --force
+          git tag -f "${{ steps.meta.outputs.version }}" "$GITHUB_SHA"
+          git push origin "refs/tags/${{ steps.meta.outputs.version }}" --force
 
       - name: 建立 GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && env.EFFECTIVE_PRESET != 'android-release-only')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             *.deb
             release/*.deb
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || env.MANUAL_RELEASE_TAG }}
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('flutter-termux-{0}-{1}', github.ref_name, env.ARCH) || format('flutter-termux-manual-test-{0}', env.ARCH) }}
-          prerelease: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
-          make_latest: ${{ github.event_name == 'workflow_dispatch' && 'false' || 'true' }}
+          tag_name: ${{ steps.meta.outputs.version }}
+          name: ${{ steps.meta.outputs.artifact_name }}
+          prerelease: false
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
