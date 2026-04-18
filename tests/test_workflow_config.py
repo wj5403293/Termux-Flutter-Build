@@ -14,6 +14,11 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertIn("termux", inputs["preset"]["options"])
         self.assertIn("full", inputs["preset"]["options"])
 
+    def test_workflow_uses_python_313(self):
+        steps = self.workflow["jobs"]["build"]["steps"]
+        setup = next(step for step in steps if step.get("uses") == "actions/setup-python@v5")
+        self.assertEqual(setup["with"]["python-version"], "3.13")
+
     def test_release_still_listens_to_tag_pushes(self):
         self.assertIn("v*", self.workflow["on"]["push"]["tags"])
 

@@ -20,21 +20,8 @@ def explore_file(src: Path):
     assert src.exists()
 
     if src.is_dir():
-        walk = getattr(src, 'walk', None)
-        if callable(walk):
-            try:
-                iterator = walk()
-            except AttributeError:
-                iterator = os.walk(src)
-                convert_root = lambda root: Path(root).relative_to(src)
-            else:
-                convert_root = lambda root: root.relative_to(src)
-        else:
-            iterator = os.walk(src)
-            convert_root = lambda root: Path(root).relative_to(src)
-
-        for root, dirs, files in iterator:
-            rel = convert_root(root)
+        for root, dirs, files in src.walk():
+            rel = root.relative_to(src)
             for it in dirs:
                 yield rel/it
             for it in files:

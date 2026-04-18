@@ -1,13 +1,12 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from package import explore_file
 
 
-class PackagePy311CompatibilityTests(unittest.TestCase):
-    def test_explore_file_walks_directories_without_path_walk(self):
+class PackageWalkTests(unittest.TestCase):
+    def test_explore_file_walks_directories(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             nested = root / "nested"
@@ -15,8 +14,7 @@ class PackagePy311CompatibilityTests(unittest.TestCase):
             file_path = nested / "file.txt"
             file_path.write_text("ok", encoding="utf-8")
 
-            with patch.object(Path, "walk", side_effect=AttributeError("walk")):
-                items = list(explore_file(root))
+            items = list(explore_file(root))
 
         self.assertIn(Path("nested"), items)
         self.assertIn(Path("nested/file.txt"), items)
