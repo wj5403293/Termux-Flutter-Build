@@ -39,6 +39,25 @@ class WorkflowConfigTests(unittest.TestCase):
         self.assertIn('mv "$TMP_NDK_DIR/android-ndk-r28c" "$ANDROID_NDK"', script)
         self.assertNotIn('mv "$(dirname "$ANDROID_NDK")/android-ndk-r28c" "$ANDROID_NDK"', script)
 
+    def test_manual_dispatch_updates_fixed_release_tag(self):
+        env = self.workflow["jobs"]["build"]["env"]
+        self.assertEqual(env["MANUAL_RELEASE_TAG"], "termux-manual-test")
+
+        steps = self.workflow["jobs"]["build"]["steps"]
+        tag_step = next(step for step in steps if step.get("name") == "更新手动测试标签")
+        self.assertIn("workflow_dispatch", tag_step["if"])
+        self.assertIn("git tag -f", tag_step["run"])
+        self.assertIn('--force', tag_step["run"])
+
+    def test_release_step_supports_manual_dispatch_fixed_release(self):
+        steps = self.workflow["jobs"]["build"]["steps"]
+        release = next(step for step in steps if step.get("name") == "建立 GitHub Release")
+
+        self.assertIn("workflow_dispatch", release["if"])
+        self.assertIn("env.MANUAL_RELEASE_TAG", release["with"]["tag_name"])
+        self.assertEqual(release["with"]["prerelease"], "${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}")
+        self.assertEqual(release["with"]["make_latest"], "${{ github.event_name == 'workflow_dispatch' && 'false' || 'true' }}")
+
 
 if __name__ == "__main__":
     unittest.main()

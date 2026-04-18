@@ -39,6 +39,7 @@ jobs:
       ARCH: ${{ inputs.arch || 'arm64' }}
       EFFECTIVE_PRESET: ${{ github.event_name == 'push' && 'termux' || inputs.preset }}
       ANDROID_NDK: ${{ github.workspace }}/.cache/android-ndk-r28c
+      MANUAL_RELEASE_TAG: termux-manual-test
 
     steps:
       - name: 下载源代码
@@ -151,12 +152,24 @@ jobs:
           retention-days: 30
           compression-level: 0
 
+      - name: 更新手动测试标签
+        if: github.event_name == 'workflow_dispatch' && env.EFFECTIVE_PRESET != 'android-release-only'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MANUAL_RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$MANUAL_RELEASE_TAG" --force
+
       - name: 建立 GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && env.EFFECTIVE_PRESET != 'android-release-only')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.deb
-          tag_name: ${{ github.ref_name }}
-          name: flutter-termux-${{ github.ref_name }}-${{ env.ARCH }}
+          files: |
+            *.deb
+            release/*.deb
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || env.MANUAL_RELEASE_TAG }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('flutter-termux-{0}-{1}', github.ref_name, env.ARCH) || format('flutter-termux-manual-test-{0}', env.ARCH) }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
+          make_latest: ${{ github.event_name == 'workflow_dispatch' && 'false' || 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
