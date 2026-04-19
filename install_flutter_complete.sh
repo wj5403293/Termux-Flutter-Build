@@ -108,7 +108,8 @@ echo -e "${GREEN}[2/${TOTAL_STEPS}]${NC} 安裝 Flutter SDK..."
 # 安裝依賴
 pkg install -y x11-repo
 # 安裝基本工具
-pkg install -y openjdk-21 git wget curl unzip cmake ninja binutils
+pkg install -y openjdk-21 git wget curl unzip cmake ninja binutils swiftshader
+
 
 # 安裝 Android build tools（需要繞過 android-sdk 依賴問題）
 for pkg in d8 dx aidl apksigner googletest android-tools; do

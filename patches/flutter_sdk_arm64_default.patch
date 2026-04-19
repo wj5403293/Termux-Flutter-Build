@@ -43,6 +43,7 @@ index 85a2ef3c71f..a17b76b8c34 100644
        help: 'The target platform for which the app is compiled.',
      );
 diff --git a/packages/flutter_tools/lib/src/test/font_config_manager.dart b/packages/flutter_tools/lib/src/test/font_config_manager.dart
+index d32964a60ff..6bc6f6d1f9d 100644
 --- a/packages/flutter_tools/lib/src/test/font_config_manager.dart
 +++ b/packages/flutter_tools/lib/src/test/font_config_manager.dart
 @@ -17,7 +17,7 @@ class FontConfigManager {
