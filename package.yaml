@@ -14,7 +14,7 @@ control:
   Maintainer: 5403293 <5403293@qq.com>
   Pre-Depends: x11-repo
   Depends: git, which, gtk3, xorgproto, ninja, cmake, clang, pkg-config, openjdk-21
-  Homepage: https://github.com/wj5403293/Termux-Flutter-Build
+  Homepage: https://github.com/wj5403293/New-TFlutter
   Description: Flutter makes it easy and fast to build beautiful apps for mobile and beyond
 
 resource:
