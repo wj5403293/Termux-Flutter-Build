@@ -86,16 +86,3 @@ index 85a2ef3c71f..a17b76b8c34 100644
        allowed: <String>['android-arm', 'android-arm64', 'android-x64'],
        help: 'The target platform for which the app is compiled.',
      );
-diff --git a/packages/flutter_tools/lib/src/test/font_config_manager.dart b/packages/flutter_tools/lib/src/test/font_config_manager.dart
-index 5a2f819d393..b25bebbd65a 100644
---- a/packages/flutter_tools/lib/src/test/font_config_manager.dart
-+++ b/packages/flutter_tools/lib/src/test/font_config_manager.dart
-@@ -17,7 +17,7 @@ class FontConfigManager {
-     final sb = StringBuffer();
-     sb.writeln('<fontconfig>');
-     sb.writeln('  <dir>${globals.cache.getCacheArtifacts().path}</dir>');
--    sb.writeln('  <cachedir>/var/cache/fontconfig</cachedir>');
-+    sb.writeln('  <cachedir>/data/data/com.termux/files/usr/var/cache/fontconfig</cachedir>');
-     sb.writeln('</fontconfig>');
- 
-     if (_fontsDirectory == null) {
